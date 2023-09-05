@@ -32,3 +32,8 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 }
 
+void APlayerCharacter::MoveForward(float AxisValue)
+{
+
+}
+
