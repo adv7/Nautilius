@@ -30,6 +30,7 @@ private:
 	void MoveForward(float AxisValue);
 	void MoveRight(float AxisValue);
 
+	virtual void Jump() override;
 	void Shoot();
 
 };
