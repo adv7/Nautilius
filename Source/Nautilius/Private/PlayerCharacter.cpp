@@ -19,14 +19,9 @@ void APlayerCharacter::BeginPlay()
 	TArray<UClimbComponent*> climbComponents;
 	GetComponents<UClimbComponent*>(OUT climbComponents);
 
-	if (climbComponents.IsEmpty())
-	{
-		return;
-	}
-	else
-	{
-		climbComponent = climbComponents[0];
-	}
+	if (!climbComponents.IsEmpty()) 
+		ClimbComponent = climbComponents[0];
+	else return;
 
 }
 
@@ -65,7 +60,7 @@ void APlayerCharacter::OvercomeObstacle()
 {
 	ACharacter::Jump();
 
-	climbComponent->Climb();
+	ClimbComponent->Climb();
 }
 
 void APlayerCharacter::Shoot()

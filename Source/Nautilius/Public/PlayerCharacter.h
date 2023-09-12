@@ -34,6 +34,6 @@ private:
 	void OvercomeObstacle();
 	void Shoot();
 
-	UClimbComponent* climbComponent{ nullptr };
+	UClimbComponent* ClimbComponent{ nullptr };
 
 };

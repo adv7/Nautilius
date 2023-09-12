@@ -26,12 +26,20 @@ public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	UPROPERTY(EditDefaultsOnly, Category="Climb")
-	FName obstacleDetectorVolumeName;
+	float MaxRange = 200;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Climb")
+	float UpDistanceAfterClimb = 10;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Climb")
+	float ForwardDistanceAfterClimb = 50;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Climb")
+	float AvailableSlopeAngle = 40;
+
+	void Climb();
 
 private:
-	UBoxComponent* obstacleDetector{ nullptr };
-
-public:
-	void Climb();
+	AController* OwnerController{ nullptr };
 		
 };

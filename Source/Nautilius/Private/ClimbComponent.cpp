@@ -1,6 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "ClimbComponent.h"
+#include <Kismet/KismetMathLibrary.h>
 
 // Sets default values for this component's properties
 UClimbComponent::UClimbComponent()
@@ -18,18 +19,10 @@ void UClimbComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	TArray<UBoxComponent*> boxComponents;
-	GetOwner()->GetComponents<UBoxComponent>(OUT boxComponents);
-	
-	FName componentName;
-	for (UBoxComponent* boxComponent : boxComponents)
-	{
-		if (boxComponent->GetFName() == obstacleDetectorVolumeName)
-			obstacleDetector = boxComponent;
-	}
-
-	if (obstacleDetector == nullptr)
-		return;
+	APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	if (OwnerPawn == nullptr) return;
+	OwnerController = OwnerPawn->GetController();
+	if (OwnerController == nullptr) return;
 	
 }
 
@@ -44,20 +37,29 @@ void UClimbComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 
 void UClimbComponent::Climb()
 {
-	TArray<AActor*> detectedActors{ nullptr };
-	obstacleDetector->GetOverlappingActors(OUT detectedActors);
+	FVector Location;
+	FRotator Rotation;
+	OwnerController->GetPlayerViewPoint(Location, Rotation);
 
-	if (!detectedActors.IsEmpty())
+	FVector End = Location + Rotation.Vector() * MaxRange;
+
+	FHitResult ClimbDestinationSurface;
+	bool bSuccess = GetWorld()->LineTraceSingleByChannel(OUT ClimbDestinationSurface, Location, End, ECollisionChannel::ECC_GameTraceChannel1);
+	if (bSuccess)
 	{
-		AActor* detectedActor = detectedActors[0];
+		if (ClimbDestinationSurface.Normal.Z > cosf(UKismetMathLibrary::DegreesToRadians(AvailableSlopeAngle)))
+		{
+			FVector ClimbDestinationLocation = OwnerController->GetPawn()->GetActorLocation();
+			ClimbDestinationLocation.Z += ClimbDestinationSurface.Location.Z;
+			ClimbDestinationLocation.Z += UpDistanceAfterClimb;
 
-		FBox detectedActorCollisionBoundings = detectedActor->GetComponentsBoundingBox();
-		UE_LOG(LogTemp, Display, TEXT("Climb: %s, bounings: %s"), *detectedActor->GetName(), *detectedActorCollisionBoundings.ToString());
+			FVector PlayerDirection = OwnerController->GetPawn()->GetActorForwardVector();
+			ClimbDestinationLocation.X += ForwardDistanceAfterClimb * PlayerDirection.X;
+			ClimbDestinationLocation.Y += ForwardDistanceAfterClimb * PlayerDirection.Y;
 
-		FVector climbDestinationLocation = GetOwner()->GetActorLocation();
-		climbDestinationLocation.Z = detectedActorCollisionBoundings.Max.Z;
-
-		GetOwner()->SetActorLocation(climbDestinationLocation);
+			DrawDebugPoint(GetWorld(), ClimbDestinationSurface.Location, 20, FColor::Red, true);
+			OwnerController->GetPawn()->SetActorLocation(ClimbDestinationLocation);
+		}
 	}
 
 }
