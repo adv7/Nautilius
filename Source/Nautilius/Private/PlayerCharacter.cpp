@@ -59,8 +59,7 @@ void APlayerCharacter::MoveRight(float AxisValue)
 void APlayerCharacter::OvercomeObstacle()
 {
 	ACharacter::Jump();
-
-	ClimbComponent->Climb();
+	ClimbComponent->CalculateClimbDestination();
 }
 
 void APlayerCharacter::Shoot()

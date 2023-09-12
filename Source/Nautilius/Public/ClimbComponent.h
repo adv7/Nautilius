@@ -35,11 +35,22 @@ public:
 	float ForwardDistanceAfterClimb = 50;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Climb")
+	float ClimbSpeed = 100;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Climb")
 	float AvailableSlopeAngle = 40;
 
-	void Climb();
+	bool bClimb = false;
+	void CalculateClimbDestination();
 
 private:
 	AController* OwnerController{ nullptr };
+	
+	FVector ClimbStartLocation = FVector::ZeroVector;
+	FVector ClimbEndLocation = FVector::ZeroVector;
+	float ClimbProgress = 0.f;
+	float ClimbLength = 0.f;
+
+	void Climb(float DeltaTime);
 		
 };

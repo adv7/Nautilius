@@ -32,14 +32,38 @@ void UClimbComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	// ...
+	if (bClimb) Climb(DeltaTime);
+
 }
 
-void UClimbComponent::Climb()
+void UClimbComponent::Climb(float DeltaTime)
+{
+	FVector NewLocation;
+	if (ClimbProgress < 1.f)
+	{
+		const float ClimbStep = (DeltaTime * ClimbSpeed) / ClimbLength;
+		ClimbProgress += ClimbStep;
+		ClimbProgress = FMath::Clamp<float>(ClimbProgress, 0.f, 1.f);
+
+		NewLocation = FMath::Lerp(ClimbStartLocation, ClimbEndLocation, ClimbProgress);
+	}
+	else
+	{
+		bClimb = false;
+		ClimbProgress = 0.f;
+		ClimbStartLocation = FVector::ZeroVector;
+		ClimbEndLocation = FVector::ZeroVector;
+		return;
+	}
+	OwnerController->GetPawn()->SetActorLocation(NewLocation);
+	
+}
+
+void UClimbComponent::CalculateClimbDestination()
 {
 	FVector Location;
 	FRotator Rotation;
-	OwnerController->GetPlayerViewPoint(Location, Rotation);
+	OwnerController->GetPlayerViewPoint(OUT Location, OUT Rotation);
 
 	FVector End = Location + Rotation.Vector() * MaxRange;
 
@@ -49,18 +73,20 @@ void UClimbComponent::Climb()
 	{
 		if (ClimbDestinationSurface.Normal.Z > cosf(UKismetMathLibrary::DegreesToRadians(AvailableSlopeAngle)))
 		{
-			FVector ClimbDestinationLocation = OwnerController->GetPawn()->GetActorLocation();
-			ClimbDestinationLocation.Z += ClimbDestinationSurface.Location.Z;
-			ClimbDestinationLocation.Z += UpDistanceAfterClimb;
+			ClimbStartLocation = OwnerController->GetPawn()->GetActorLocation();
+			
+			ClimbEndLocation = ClimbStartLocation;
+			ClimbEndLocation.Z += ClimbDestinationSurface.Location.Z + UpDistanceAfterClimb;
 
-			FVector PlayerDirection = OwnerController->GetPawn()->GetActorForwardVector();
-			ClimbDestinationLocation.X += ForwardDistanceAfterClimb * PlayerDirection.X;
-			ClimbDestinationLocation.Y += ForwardDistanceAfterClimb * PlayerDirection.Y;
+			/*FVector PlayerDirection = OwnerController->GetPawn()->GetActorForwardVector();
+			ClimbEndLocation.X += ForwardDistanceAfterClimb * PlayerDirection.X;
+			ClimbEndLocation.Y += ForwardDistanceAfterClimb * PlayerDirection.Y;*/
+
+			ClimbLength = (ClimbEndLocation - ClimbStartLocation).Size();
 
 			DrawDebugPoint(GetWorld(), ClimbDestinationSurface.Location, 20, FColor::Red, true);
-			OwnerController->GetPawn()->SetActorLocation(ClimbDestinationLocation);
+			bClimb = true;
 		}
 	}
-
 }
 
