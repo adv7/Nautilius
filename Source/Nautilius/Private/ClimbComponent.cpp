@@ -47,12 +47,22 @@ void UClimbComponent::Climb(float DeltaTime)
 
 		NewLocation = FMath::Lerp(ClimbStartLocation, ClimbEndLocation, ClimbProgress);
 	}
+	else if (MoveForwardProgress < 1.f)
+	{
+		const float MoveForwardStep = (DeltaTime * ClimbSpeed) / ForwardDistanceAfterClimb;
+		MoveForwardProgress += MoveForwardStep;
+		MoveForwardProgress = FMath::Clamp<float>(MoveForwardProgress, 0.f, 1.f);
+
+		NewLocation = FMath::Lerp(ClimbEndLocation, ForwardEndLocation, MoveForwardProgress);
+	}
 	else
 	{
 		bClimb = false;
 		ClimbProgress = 0.f;
+		MoveForwardProgress = 0.f;
 		ClimbStartLocation = FVector::ZeroVector;
 		ClimbEndLocation = FVector::ZeroVector;
+		ForwardEndLocation = FVector::ZeroVector;
 		return;
 	}
 	OwnerController->GetPawn()->SetActorLocation(NewLocation);
@@ -67,8 +77,9 @@ void UClimbComponent::CalculateClimbDestination()
 
 	FVector End = Location + Rotation.Vector() * MaxRange;
 
+	FCollisionShape Detector = FCollisionShape::MakeSphere(SurfaceDetectionRadius);
 	FHitResult ClimbDestinationSurface;
-	bool bSuccess = GetWorld()->LineTraceSingleByChannel(OUT ClimbDestinationSurface, Location, End, ECollisionChannel::ECC_GameTraceChannel1);
+	bool bSuccess = GetWorld()->SweepSingleByChannel(OUT ClimbDestinationSurface, Location, End, Rotation.Quaternion(), ECollisionChannel::ECC_GameTraceChannel1, Detector);
 	if (bSuccess)
 	{
 		if (ClimbDestinationSurface.Normal.Z > cosf(UKismetMathLibrary::DegreesToRadians(AvailableSlopeAngle)))
@@ -77,14 +88,13 @@ void UClimbComponent::CalculateClimbDestination()
 			
 			ClimbEndLocation = ClimbStartLocation;
 			ClimbEndLocation.Z += ClimbDestinationSurface.Location.Z + UpDistanceAfterClimb;
-
-			/*FVector PlayerDirection = OwnerController->GetPawn()->GetActorForwardVector();
-			ClimbEndLocation.X += ForwardDistanceAfterClimb * PlayerDirection.X;
-			ClimbEndLocation.Y += ForwardDistanceAfterClimb * PlayerDirection.Y;*/
-
 			ClimbLength = (ClimbEndLocation - ClimbStartLocation).Size();
 
-			DrawDebugPoint(GetWorld(), ClimbDestinationSurface.Location, 20, FColor::Red, true);
+			FVector PlayerDirection = OwnerController->GetPawn()->GetActorForwardVector();
+			ForwardEndLocation = ClimbEndLocation;
+			ForwardEndLocation.X += ForwardDistanceAfterClimb * PlayerDirection.X;
+			ForwardEndLocation.Y += ForwardDistanceAfterClimb * PlayerDirection.Y;
+
 			bClimb = true;
 		}
 	}

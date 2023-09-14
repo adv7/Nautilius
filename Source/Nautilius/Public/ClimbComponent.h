@@ -28,6 +28,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category="Climb")
 	float MaxRange = 200;
 
+	UPROPERTY(EditDefaultsOnly, Category="Climb")
+	float SurfaceDetectionRadius = 30;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Climb")
 	float UpDistanceAfterClimb = 10;
 	
@@ -48,8 +51,10 @@ private:
 	
 	FVector ClimbStartLocation = FVector::ZeroVector;
 	FVector ClimbEndLocation = FVector::ZeroVector;
+	FVector ForwardEndLocation = FVector::ZeroVector;
 	float ClimbProgress = 0.f;
 	float ClimbLength = 0.f;
+	float MoveForwardProgress = 0.f;
 
 	void Climb(float DeltaTime);
 		
