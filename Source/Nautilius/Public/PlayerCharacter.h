@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "ClimbComponent.h"
 #include "PlayerCharacter.generated.h"
 
@@ -34,6 +35,20 @@ private:
 	void OvercomeObstacle();
 	void Shoot();
 
+	void StartSprint();
+	void Sprint();
+	void StopSprint();
+
+	bool bIsSprintPressed = false;
+	bool bIsMovingForward = false;
+
 	UClimbComponent* ClimbComponent{ nullptr };
+
+public:
+	UPROPERTY(EditDefaultsOnly, Category = "Movement")
+	float DefaultWalkSpeed = 388.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Movement")
+	float SprintVelocity = 667.f;
 
 };
