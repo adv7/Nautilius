@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "ClimbComponent.h"
 #include "PlayerCharacter.generated.h"
 
 UCLASS()
@@ -30,7 +31,9 @@ private:
 	void MoveForward(float AxisValue);
 	void MoveRight(float AxisValue);
 
-	virtual void Jump() override;
+	void OvercomeObstacle();
 	void Shoot();
+
+	UClimbComponent* ClimbComponent{ nullptr };
 
 };

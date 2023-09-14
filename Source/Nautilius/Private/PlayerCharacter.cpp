@@ -15,7 +15,14 @@ APlayerCharacter::APlayerCharacter()
 void APlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
+	TArray<UClimbComponent*> climbComponents;
+	GetComponents<UClimbComponent*>(OUT climbComponents);
+
+	if (!climbComponents.IsEmpty()) 
+		ClimbComponent = climbComponents[0];
+	else return;
+
 }
 
 // Called every frame
@@ -35,7 +42,7 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 	PlayerInputComponent->BindAxis(TEXT("LookUp"), this, &APawn::AddControllerPitchInput);
 	PlayerInputComponent->BindAxis(TEXT("LookRight"), this, &APawn::AddControllerYawInput);
 
-	PlayerInputComponent->BindAction(TEXT("Jump"), EInputEvent::IE_Pressed, this, &APlayerCharacter::Jump);
+	PlayerInputComponent->BindAction(TEXT("Jump"), EInputEvent::IE_Pressed, this, &APlayerCharacter::OvercomeObstacle);
 	PlayerInputComponent->BindAction(TEXT("Shoot"), EInputEvent::IE_Pressed, this, &APlayerCharacter::Shoot);
 }
 
@@ -49,11 +56,10 @@ void APlayerCharacter::MoveRight(float AxisValue)
 	AddMovementInput(GetActorRightVector() * AxisValue);
 }
 
-void APlayerCharacter::Jump()
+void APlayerCharacter::OvercomeObstacle()
 {
-	Super::Jump();
-
-	UE_LOG(LogTemp, Warning, TEXT("Jump overriden"));
+	ACharacter::Jump();
+	ClimbComponent->CalculateClimbDestination();
 }
 
 void APlayerCharacter::Shoot()
