@@ -9,6 +9,7 @@ APlayerCharacter::APlayerCharacter()
  	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
+	GetCharacterMovement()->MaxWalkSpeed = DefaultWalkSpeed;
 }
 
 // Called when the game starts or when spawned
@@ -30,6 +31,8 @@ void APlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	if (bIsSprintPressed) Sprint();
+
 }
 
 // Called to bind functionality to input
@@ -44,10 +47,14 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 	PlayerInputComponent->BindAction(TEXT("Jump"), EInputEvent::IE_Pressed, this, &APlayerCharacter::OvercomeObstacle);
 	PlayerInputComponent->BindAction(TEXT("Shoot"), EInputEvent::IE_Pressed, this, &APlayerCharacter::Shoot);
+	PlayerInputComponent->BindAction(TEXT("Sprint"), EInputEvent::IE_Pressed, this, &APlayerCharacter::StartSprint);
+	PlayerInputComponent->BindAction(TEXT("Sprint"), EInputEvent::IE_Released, this, &APlayerCharacter::StopSprint);
 }
 
 void APlayerCharacter::MoveForward(float AxisValue)
 {
+	if (AxisValue > 0.f) bIsMovingForward = true;
+	else bIsMovingForward = false;
 	AddMovementInput(GetActorForwardVector() * AxisValue);
 }
 
@@ -65,4 +72,21 @@ void APlayerCharacter::OvercomeObstacle()
 void APlayerCharacter::Shoot()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Shoot"));
+}
+
+void APlayerCharacter::StartSprint()
+{
+	bIsSprintPressed = true;
+}
+
+void APlayerCharacter::Sprint()
+{
+	if (bIsMovingForward) GetCharacterMovement()->MaxWalkSpeed = SprintVelocity;
+	else GetCharacterMovement()->MaxWalkSpeed = DefaultWalkSpeed;
+}
+
+void APlayerCharacter::StopSprint()
+{
+	GetCharacterMovement()->MaxWalkSpeed = DefaultWalkSpeed;
+	bIsSprintPressed = false;
 }
