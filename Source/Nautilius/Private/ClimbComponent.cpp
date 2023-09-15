@@ -2,6 +2,7 @@
 
 #include "ClimbComponent.h"
 #include <Kismet/KismetMathLibrary.h>
+#include "GameFramework/Character.h"
 
 // Sets default values for this component's properties
 UClimbComponent::UClimbComponent()
@@ -19,10 +20,15 @@ void UClimbComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	APawn* OwnerPawn = Cast<APawn>(GetOwner());
-	if (OwnerPawn == nullptr) return;
-	OwnerController = OwnerPawn->GetController();
+	ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner());
+	if (OwnerCharacter == nullptr) return;
+
+	OwnerController = OwnerCharacter->GetController();
 	if (OwnerController == nullptr) return;
+
+	OwnerCapsule = OwnerController->GetCharacter()->GetCapsuleComponent();
+	if (OwnerCapsule == nullptr) return;
+	CapsuleHeight = OwnerCapsule->GetScaledCapsuleHalfHeight();
 	
 }
 
@@ -85,9 +91,9 @@ void UClimbComponent::CalculateClimbDestination()
 		if (ClimbDestinationSurface.Normal.Z > cosf(UKismetMathLibrary::DegreesToRadians(AvailableSlopeAngle)))
 		{
 			ClimbStartLocation = OwnerController->GetPawn()->GetActorLocation();
-			
+		
 			ClimbEndLocation = ClimbStartLocation;
-			ClimbEndLocation.Z += ClimbDestinationSurface.Location.Z + UpDistanceAfterClimb;
+			ClimbEndLocation.Z = ClimbDestinationSurface.Location.Z + CapsuleHeight + UpDistanceAfterClimb;
 			ClimbLength = (ClimbEndLocation - ClimbStartLocation).Size();
 
 			FVector PlayerDirection = OwnerController->GetPawn()->GetActorForwardVector();

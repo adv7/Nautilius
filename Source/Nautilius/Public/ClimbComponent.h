@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "Components/BoxComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "ClimbComponent.generated.h"
 
 
@@ -48,6 +48,8 @@ public:
 
 private:
 	AController* OwnerController{ nullptr };
+	UCapsuleComponent* OwnerCapsule{ nullptr };
+	float CapsuleHeight = 0.f;
 	
 	FVector ClimbStartLocation = FVector::ZeroVector;
 	FVector ClimbEndLocation = FVector::ZeroVector;
