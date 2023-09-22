@@ -28,7 +28,8 @@ void UClimbComponent::BeginPlay()
 
 	OwnerCapsule = OwnerController->GetCharacter()->GetCapsuleComponent();
 	if (OwnerCapsule == nullptr) return;
-	CapsuleHeight = OwnerCapsule->GetScaledCapsuleHalfHeight();
+	PlayerCapsuleHeight = OwnerCapsule->GetScaledCapsuleHalfHeight();
+	PlayerCapsuleRadius = OwnerCapsule->GetScaledCapsuleRadius();
 	
 }
 
@@ -91,18 +92,32 @@ void UClimbComponent::CalculateClimbDestination()
 		if (ClimbDestinationSurface.Normal.Z > cosf(UKismetMathLibrary::DegreesToRadians(AvailableSlopeAngle)))
 		{
 			ClimbStartLocation = OwnerController->GetPawn()->GetActorLocation();
-			//DrawDebugSphere(GetWorld(), ClimbDestinationSurface.Location, SurfaceDetectionRadius, 16, FColor::Red, true);
 		
 			ClimbEndLocation = ClimbStartLocation;
-			ClimbEndLocation.Z = ClimbDestinationSurface.Location.Z + CapsuleHeight + UpDistanceAfterClimb;
+			ClimbEndLocation.Z = ClimbDestinationSurface.Location.Z + PlayerCapsuleHeight + UpDistanceAfterClimb;
 			ClimbLength = (ClimbEndLocation - ClimbStartLocation).Size();
+
+			TArray<AActor*> ActorsToIgnore{ GetOwner() };
+			FCollisionQueryParams QueryParams;
+			QueryParams.AddIgnoredActors(ActorsToIgnore);
+			
+			FCollisionShape PlayerCapsule = FCollisionShape::MakeCapsule(PlayerCapsuleRadius, PlayerCapsuleHeight);
+
+			FHitResult CapsuleHitUp;
+			GetWorld()->SweepSingleByChannel(OUT CapsuleHitUp, ClimbStartLocation, ClimbEndLocation, FQuat::Identity, ECC_WorldStatic, PlayerCapsule, QueryParams);
 
 			FVector PlayerDirection = OwnerController->GetPawn()->GetActorForwardVector();
 			ForwardEndLocation = ClimbEndLocation;
 			ForwardEndLocation.X += ForwardDistanceAfterClimb * PlayerDirection.X;
 			ForwardEndLocation.Y += ForwardDistanceAfterClimb * PlayerDirection.Y;
 
-			bClimb = true;
+			FHitResult CapsuleHitForward;
+			GetWorld()->SweepSingleByChannel(OUT CapsuleHitForward, ClimbEndLocation, ForwardEndLocation, FQuat::Identity, ECC_WorldStatic, PlayerCapsule, QueryParams);
+
+			if (!CapsuleHitUp.bBlockingHit && !CapsuleHitForward.bBlockingHit)
+			{
+				bClimb = true;
+			}
 		}
 	}
 }

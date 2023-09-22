@@ -49,7 +49,8 @@ public:
 private:
 	AController* OwnerController{ nullptr };
 	UCapsuleComponent* OwnerCapsule{ nullptr };
-	float CapsuleHeight = 0.f;
+	float PlayerCapsuleHeight = 0.f;
+	float PlayerCapsuleRadius = 0.f;
 	
 	FVector ClimbStartLocation = FVector::ZeroVector;
 	FVector ClimbEndLocation = FVector::ZeroVector;
