@@ -91,6 +91,7 @@ void UClimbComponent::CalculateClimbDestination()
 		if (ClimbDestinationSurface.Normal.Z > cosf(UKismetMathLibrary::DegreesToRadians(AvailableSlopeAngle)))
 		{
 			ClimbStartLocation = OwnerController->GetPawn()->GetActorLocation();
+			//DrawDebugSphere(GetWorld(), ClimbDestinationSurface.Location, SurfaceDetectionRadius, 16, FColor::Red, true);
 		
 			ClimbEndLocation = ClimbStartLocation;
 			ClimbEndLocation.Z = ClimbDestinationSurface.Location.Z + CapsuleHeight + UpDistanceAfterClimb;
