@@ -17,6 +17,8 @@ void APlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
+	PlayerController = Cast<APlayerController>(GetController());
+
 	TArray<UClimbComponent*> climbComponents;
 	GetComponents<UClimbComponent*>(OUT climbComponents);
 
@@ -31,7 +33,12 @@ void APlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (bIsSprintPressed) Sprint();
+	if (bIsSprinting) Sprint();
+
+	if (ensure(PlayerController) && (bIsMovingBackOrForth || bIsMovingSideways))
+		HeadbobShakeInstance = PlayerController->PlayerCameraManager->StartCameraShake(HeadbobShake);
+	else
+		if (ensure(PlayerController)) PlayerController->PlayerCameraManager->StopCameraShake(HeadbobShakeInstance, false);
 
 	bIsFalling = (GetVelocity().Z < 0.f) ? true : false;
 	if (bIsFalling && !ClimbComponent->bIsClimbing) ClimbComponent->TryClimb();
@@ -56,13 +63,15 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 void APlayerCharacter::MoveForward(float AxisValue)
 {
+	AddMovementInput(GetActorForwardVector() * AxisValue);	
+	bIsMovingBackOrForth = (AxisValue != 0.f) ? true : false;
 	bIsMovingForward = (AxisValue > 0.f) ? true : false;
-	AddMovementInput(GetActorForwardVector() * AxisValue);
 }
 
 void APlayerCharacter::MoveRight(float AxisValue)
 {
 	AddMovementInput(GetActorRightVector() * AxisValue);
+	bIsMovingSideways = (AxisValue != 0.f) ? true : false;
 }
 
 void APlayerCharacter::OvercomeObstacle()
@@ -78,7 +87,7 @@ void APlayerCharacter::Shoot()
 
 void APlayerCharacter::StartSprint()
 {
-	bIsSprintPressed = true;
+	bIsSprinting = true;
 }
 
 void APlayerCharacter::Sprint()
@@ -90,5 +99,5 @@ void APlayerCharacter::Sprint()
 void APlayerCharacter::StopSprint()
 {
 	GetCharacterMovement()->MaxWalkSpeed = DefaultWalkSpeed;
-	bIsSprintPressed = false;
+	bIsSprinting = false;
 }

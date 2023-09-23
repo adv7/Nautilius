@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Camera/CameraShakeBase.h"
 #include "ClimbComponent.h"
 #include "PlayerCharacter.generated.h"
 
@@ -39,11 +40,16 @@ private:
 	void Sprint();
 	void StopSprint();
 
-	bool bIsSprintPressed = false;
+	bool bIsSprinting = false;
 	bool bIsMovingForward = false;
 	bool bIsFalling = false;
+	bool bIsMovingBackOrForth = false;
+	bool bIsMovingSideways = false;
 
+	APlayerController* PlayerController{ nullptr };
 	UClimbComponent* ClimbComponent{ nullptr };
+
+	UCameraShakeBase* HeadbobShakeInstance{ nullptr };
 
 public:
 	UPROPERTY(EditDefaultsOnly, Category = "Movement")
@@ -51,5 +57,8 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Movement")
 	float SprintVelocity = 667.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Camera")
+	TSubclassOf<UCameraShakeBase> HeadbobShake{ nullptr };
 
 };
