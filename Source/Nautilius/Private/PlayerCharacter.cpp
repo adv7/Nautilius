@@ -35,10 +35,13 @@ void APlayerCharacter::Tick(float DeltaTime)
 
 	if (bIsSprinting) Sprint();
 
-	if (ensure(PlayerController) && (bIsMovingBackOrForth || bIsMovingSideways))
-		HeadbobShakeInstance = PlayerController->PlayerCameraManager->StartCameraShake(HeadbobShake);
-	else
-		if (ensure(PlayerController)) PlayerController->PlayerCameraManager->StopCameraShake(HeadbobShakeInstance, false);
+	if (ensure(PlayerController))
+	{
+		if (bIsMovingBackOrForth || bIsMovingSideways) 
+			HeadbobShakeInstance = PlayerController->PlayerCameraManager->StartCameraShake(HeadbobShake);
+		else 
+			PlayerController->PlayerCameraManager->StopCameraShake(HeadbobShakeInstance, false);
+	}
 
 	bIsFalling = (GetVelocity().Z < 0.f) ? true : false;
 	if (bIsFalling && !ClimbComponent->bIsClimbing) ClimbComponent->TryClimb();
