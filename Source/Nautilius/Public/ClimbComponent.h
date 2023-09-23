@@ -43,8 +43,12 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Climb")
 	float AvailableSlopeAngle = 20.f;
 
-	bool bClimb = false;
-	void CalculateClimbDestination();
+	/** Time after climb when performing climb againg is impossible */
+	UPROPERTY(EditDefaultsOnly, Category = "Climb")
+	float AfterClimbRestTime = 0.5f;
+
+	bool bIsClimbing = false;
+	void TryClimb();
 
 private:
 	AController* OwnerController{ nullptr };
@@ -58,6 +62,7 @@ private:
 	float ClimbProgress = 0.f;
 	float ClimbLength = 0.f;
 	float MoveForwardProgress = 0.f;
+	float AfterClimbRestProgress = 0.f;
 
 	void Climb(float DeltaTime);
 		

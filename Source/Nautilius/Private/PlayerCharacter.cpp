@@ -33,6 +33,9 @@ void APlayerCharacter::Tick(float DeltaTime)
 
 	if (bIsSprintPressed) Sprint();
 
+	bIsFalling = (GetVelocity().Z < 0.f) ? true : false;
+	if (bIsFalling && !ClimbComponent->bIsClimbing) ClimbComponent->TryClimb();
+
 }
 
 // Called to bind functionality to input
@@ -53,8 +56,7 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 void APlayerCharacter::MoveForward(float AxisValue)
 {
-	if (AxisValue > 0.f) bIsMovingForward = true;
-	else bIsMovingForward = false;
+	bIsMovingForward = (AxisValue > 0.f) ? true : false;
 	AddMovementInput(GetActorForwardVector() * AxisValue);
 }
 
@@ -66,7 +68,7 @@ void APlayerCharacter::MoveRight(float AxisValue)
 void APlayerCharacter::OvercomeObstacle()
 {
 	ACharacter::Jump();
-	ClimbComponent->CalculateClimbDestination();
+	ClimbComponent->TryClimb();
 }
 
 void APlayerCharacter::Shoot()
@@ -81,7 +83,7 @@ void APlayerCharacter::StartSprint()
 
 void APlayerCharacter::Sprint()
 {
-	if (bIsMovingForward) GetCharacterMovement()->MaxWalkSpeed = SprintVelocity;
+	if (bIsMovingForward && !bIsFalling) GetCharacterMovement()->MaxWalkSpeed = SprintVelocity;
 	else GetCharacterMovement()->MaxWalkSpeed = DefaultWalkSpeed;
 }
 

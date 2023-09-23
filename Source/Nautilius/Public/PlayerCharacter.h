@@ -41,6 +41,7 @@ private:
 
 	bool bIsSprintPressed = false;
 	bool bIsMovingForward = false;
+	bool bIsFalling = false;
 
 	UClimbComponent* ClimbComponent{ nullptr };
 

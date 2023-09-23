@@ -39,7 +39,7 @@ void UClimbComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (bClimb) Climb(DeltaTime);
+	if (bIsClimbing) Climb(DeltaTime);
 
 }
 
@@ -62,21 +62,26 @@ void UClimbComponent::Climb(float DeltaTime)
 
 		NewLocation = FMath::Lerp(ClimbEndLocation, ForwardEndLocation, MoveForwardProgress);
 	}
+	else if (AfterClimbRestProgress < AfterClimbRestTime)
+	{
+		AfterClimbRestProgress += DeltaTime;
+		return;
+	}
 	else
 	{
-		bClimb = false;
+		bIsClimbing = false;
 		ClimbProgress = 0.f;
 		MoveForwardProgress = 0.f;
+		AfterClimbRestProgress = 0.f;
 		ClimbStartLocation = FVector::ZeroVector;
 		ClimbEndLocation = FVector::ZeroVector;
 		ForwardEndLocation = FVector::ZeroVector;
 		return;
 	}
 	OwnerController->GetPawn()->SetActorLocation(NewLocation);
-	
 }
 
-void UClimbComponent::CalculateClimbDestination()
+void UClimbComponent::TryClimb()
 {
 	FVector Location;
 	FRotator Rotation;
@@ -116,7 +121,7 @@ void UClimbComponent::CalculateClimbDestination()
 
 			if (!CapsuleHitUp.bBlockingHit && !CapsuleHitForward.bBlockingHit)
 			{
-				bClimb = true;
+				bIsClimbing = true;
 			}
 		}
 	}
