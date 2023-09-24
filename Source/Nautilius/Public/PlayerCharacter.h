@@ -56,9 +56,11 @@ private:
 	void StopCameraShakes(TArray<UCameraShakeBase*> CameraShakeInstances);
 
 public:
+	/** Speed in centimeters per second. */
 	UPROPERTY(EditDefaultsOnly, Category = "Movement")
 	float DefaultWalkSpeed = 388.f;
 
+	/** Speed in centimeters per second. */
 	UPROPERTY(EditDefaultsOnly, Category = "Movement")
 	float SprintVelocity = 667.f;
 
