@@ -19,11 +19,11 @@ void APlayerCharacter::BeginPlay()
 
 	PlayerController = Cast<APlayerController>(GetController());
 
-	TArray<UClimbComponent*> climbComponents;
-	GetComponents<UClimbComponent*>(OUT climbComponents);
+	TArray<UClimbComponent*> ClimbComponents;
+	GetComponents<UClimbComponent*>(OUT ClimbComponents);
 
-	if (!climbComponents.IsEmpty()) 
-		ClimbComponent = climbComponents[0];
+	if (!ClimbComponents.IsEmpty())
+		ClimbComponent = ClimbComponents[0];
 	else return;
 
 }
@@ -35,13 +35,7 @@ void APlayerCharacter::Tick(float DeltaTime)
 
 	if (bIsSprinting) Sprint();
 
-	if (ensure(PlayerController))
-	{
-		if (bIsMovingBackOrForth || bIsMovingSideways) 
-			HeadbobShakeInstance = PlayerController->PlayerCameraManager->StartCameraShake(HeadbobShake);
-		else 
-			PlayerController->PlayerCameraManager->StopCameraShake(HeadbobShakeInstance, false);
-	}
+	if (ensure(PlayerController)) SetHeadShake();
 
 	bIsFalling = (GetVelocity().Z < 0.f) ? true : false;
 	if (bIsFalling && !ClimbComponent->bIsClimbing) ClimbComponent->TryClimb();
@@ -103,4 +97,36 @@ void APlayerCharacter::StopSprint()
 {
 	GetCharacterMovement()->MaxWalkSpeed = DefaultWalkSpeed;
 	bIsSprinting = false;
+}
+
+void APlayerCharacter::SetHeadShake()
+{
+	if (ensure(IdleHeadShake) && ensure(WalkHeadShake) && ensure(SprintHeadShake))
+	{
+		if (bIsSprinting && bIsMovingForward)
+		{
+			StopCameraShakes(TArray<UCameraShakeBase*> {IdleHeadShakeInstance, WalkHeadShakeInstance});
+			SprintHeadShakeInstance = PlayerController->PlayerCameraManager->StartCameraShake(SprintHeadShake);
+		}
+		else if (bIsMovingBackOrForth || bIsMovingSideways)
+		{
+			StopCameraShakes(TArray<UCameraShakeBase*> {IdleHeadShakeInstance, SprintHeadShakeInstance});
+			WalkHeadShakeInstance = PlayerController->PlayerCameraManager->StartCameraShake(WalkHeadShake);
+		}
+		else
+		{
+			StopCameraShakes(TArray<UCameraShakeBase*> {WalkHeadShakeInstance, SprintHeadShakeInstance});
+			IdleHeadShakeInstance = PlayerController->PlayerCameraManager->StartCameraShake(IdleHeadShake);
+		}
+	}
+}
+
+/* Shakes work fine without stopping them, leaved as a form of fun fact. */
+void APlayerCharacter::StopCameraShakes(TArray<UCameraShakeBase*> CameraShakeInstances)
+{
+	for (UCameraShakeBase* CameraShakeInstance : CameraShakeInstances)
+	{
+		if (CameraShakeInstance) 
+			PlayerController->PlayerCameraManager->StopCameraShake(CameraShakeInstance, false);
+	}
 }

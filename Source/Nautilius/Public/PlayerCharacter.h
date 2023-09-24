@@ -49,7 +49,11 @@ private:
 	APlayerController* PlayerController{ nullptr };
 	UClimbComponent* ClimbComponent{ nullptr };
 
-	UCameraShakeBase* HeadbobShakeInstance{ nullptr };
+	UCameraShakeBase* IdleHeadShakeInstance{ nullptr };
+	UCameraShakeBase* WalkHeadShakeInstance{ nullptr };
+	UCameraShakeBase* SprintHeadShakeInstance{ nullptr };
+	void SetHeadShake();
+	void StopCameraShakes(TArray<UCameraShakeBase*> CameraShakeInstances);
 
 public:
 	UPROPERTY(EditDefaultsOnly, Category = "Movement")
@@ -59,6 +63,12 @@ public:
 	float SprintVelocity = 667.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Camera")
-	TSubclassOf<UCameraShakeBase> HeadbobShake{ nullptr };
+	TSubclassOf<UCameraShakeBase> IdleHeadShake{ nullptr };
+
+	UPROPERTY(EditDefaultsOnly, Category = "Camera")
+	TSubclassOf<UCameraShakeBase> WalkHeadShake{ nullptr };
+
+	UPROPERTY(EditDefaultsOnly, Category = "Camera")
+	TSubclassOf<UCameraShakeBase> SprintHeadShake{ nullptr };
 
 };
