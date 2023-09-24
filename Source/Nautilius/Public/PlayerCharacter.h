@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Camera/CameraShakeBase.h"
 #include "ClimbComponent.h"
 #include "PlayerCharacter.generated.h"
 
@@ -39,17 +40,37 @@ private:
 	void Sprint();
 	void StopSprint();
 
-	bool bIsSprintPressed = false;
+	bool bIsSprinting = false;
 	bool bIsMovingForward = false;
 	bool bIsFalling = false;
+	bool bIsMovingBackOrForth = false;
+	bool bIsMovingSideways = false;
 
+	APlayerController* PlayerController{ nullptr };
 	UClimbComponent* ClimbComponent{ nullptr };
 
+	UCameraShakeBase* IdleHeadShakeInstance{ nullptr };
+	UCameraShakeBase* WalkHeadShakeInstance{ nullptr };
+	UCameraShakeBase* SprintHeadShakeInstance{ nullptr };
+	void SetHeadShake();
+	void StopCameraShakes(TArray<UCameraShakeBase*> CameraShakeInstances);
+
 public:
+	/** Speed in centimeters per second. */
 	UPROPERTY(EditDefaultsOnly, Category = "Movement")
 	float DefaultWalkSpeed = 388.f;
 
+	/** Speed in centimeters per second. */
 	UPROPERTY(EditDefaultsOnly, Category = "Movement")
 	float SprintVelocity = 667.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Camera")
+	TSubclassOf<UCameraShakeBase> IdleHeadShake{ nullptr };
+
+	UPROPERTY(EditDefaultsOnly, Category = "Camera")
+	TSubclassOf<UCameraShakeBase> WalkHeadShake{ nullptr };
+
+	UPROPERTY(EditDefaultsOnly, Category = "Camera")
+	TSubclassOf<UCameraShakeBase> SprintHeadShake{ nullptr };
 
 };
