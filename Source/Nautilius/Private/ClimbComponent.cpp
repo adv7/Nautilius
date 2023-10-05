@@ -83,47 +83,48 @@ void UClimbComponent::Climb(float DeltaTime)
 
 void UClimbComponent::TryClimb()
 {
-	FVector Location;
-	FRotator Rotation;
-	OwnerController->GetPlayerViewPoint(OUT Location, OUT Rotation);
-
-	FVector End = Location + Rotation.Vector() * MaxRange;
+	FVector Location = OwnerController->GetPawn()->GetActorLocation();
+	FRotator Rotation = OwnerController->GetPawn()->GetActorForwardVector().Rotation();
+	FVector ForwardEnd = Location + Rotation.Vector() * MaxRange;
 
 	FCollisionShape Detector = FCollisionShape::MakeSphere(SurfaceDetectionRadius);
-	FHitResult ClimbDestinationSurface;
-	bool bSuccess = GetWorld()->SweepSingleByChannel(OUT ClimbDestinationSurface, Location, End, Rotation.Quaternion(), ECollisionChannel::ECC_GameTraceChannel1, Detector);
-	if (bSuccess)
+	FHitResult DetectedForwardSurface;
+	bool bForwardHit = GetWorld()->SweepSingleByChannel(OUT DetectedForwardSurface, Location, ForwardEnd, Rotation.Quaternion(), ECollisionChannel::ECC_GameTraceChannel1, Detector);
+	if (bForwardHit)
 	{
-		if (ClimbDestinationSurface.Normal.Z > cosf(UKismetMathLibrary::DegreesToRadians(AvailableSlopeAngle)))
+		FVector ClimbMaxHeight = DetectedForwardSurface.ImpactPoint + FVector(0.f, 0.f, AvailableClimbHeight) + Rotation.Vector() * CheckingDownwardDistance;
+		FVector DownwardEnd = DetectedForwardSurface.ImpactPoint + Rotation.Vector() * CheckingDownwardDistance;
+
+		FHitResult DetectedUpSurface;
+		bool bDownwardHit = GetWorld()->SweepSingleByChannel(OUT DetectedUpSurface, ClimbMaxHeight, DownwardEnd, Rotation.Quaternion(), ECollisionChannel::ECC_GameTraceChannel1, Detector);
+		if (bDownwardHit)
 		{
-			ClimbStartLocation = OwnerController->GetPawn()->GetActorLocation();
-		
-			ClimbEndLocation = ClimbStartLocation;
-			ClimbEndLocation.Z = ClimbDestinationSurface.Location.Z + PlayerCapsuleHeight + UpDistanceAfterClimb;
-			ClimbLength = (ClimbEndLocation - ClimbStartLocation).Size();
-
-			TArray<AActor*> ActorsToIgnore{ GetOwner() };
-			FCollisionQueryParams QueryParams;
-			QueryParams.AddIgnoredActors(ActorsToIgnore);
-			
-			FCollisionShape PlayerCapsule = FCollisionShape::MakeCapsule(PlayerCapsuleRadius, PlayerCapsuleHeight);
-
-			FHitResult CapsuleHitUp;
-			GetWorld()->SweepSingleByChannel(OUT CapsuleHitUp, ClimbStartLocation, ClimbEndLocation, FQuat::Identity, ECC_WorldStatic, PlayerCapsule, QueryParams);
-
-			FVector PlayerDirection = OwnerController->GetPawn()->GetActorForwardVector();
-			ForwardEndLocation = ClimbEndLocation;
-			ForwardEndLocation.X += ForwardDistanceAfterClimb * PlayerDirection.X;
-			ForwardEndLocation.Y += ForwardDistanceAfterClimb * PlayerDirection.Y;
-
-			FHitResult CapsuleHitForward;
-			GetWorld()->SweepSingleByChannel(OUT CapsuleHitForward, ClimbEndLocation, ForwardEndLocation, FQuat::Identity, ECC_WorldStatic, PlayerCapsule, QueryParams);
-
-			if (!CapsuleHitUp.bBlockingHit && !CapsuleHitForward.bBlockingHit)
+			if (DetectedUpSurface.Normal.Z > cosf(UKismetMathLibrary::DegreesToRadians(AvailableSlopeAngle)))
 			{
-				bIsClimbing = true;
+				ClimbStartLocation = OwnerController->GetPawn()->GetActorLocation();
+				ClimbEndLocation = ClimbStartLocation;
+				ClimbEndLocation.Z = DetectedUpSurface.Location.Z + PlayerCapsuleHeight + UpDistanceAfterClimb;
+				ClimbLength = (ClimbEndLocation - ClimbStartLocation).Size();
+
+				TArray<AActor*> ActorsToIgnore{ GetOwner() };
+				FCollisionQueryParams QueryParams;
+				QueryParams.AddIgnoredActors(ActorsToIgnore);
+			
+				FCollisionShape PlayerCapsule = FCollisionShape::MakeCapsule(PlayerCapsuleRadius, PlayerCapsuleHeight);
+
+				FHitResult CapsuleHitUp;
+				GetWorld()->SweepSingleByChannel(OUT CapsuleHitUp, ClimbStartLocation, ClimbEndLocation, FQuat::Identity, ECC_WorldStatic, PlayerCapsule, QueryParams);
+
+				ForwardEndLocation = ClimbEndLocation + Rotation.Vector() * ForwardDistanceAfterClimb;
+
+				FHitResult CapsuleHitForward;
+				GetWorld()->SweepSingleByChannel(OUT CapsuleHitForward, ClimbEndLocation, ForwardEndLocation, FQuat::Identity, ECC_WorldStatic, PlayerCapsule, QueryParams);
+
+				if (!CapsuleHitUp.bBlockingHit && !CapsuleHitForward.bBlockingHit)
+				{
+					bIsClimbing = true;
+				}
 			}
 		}
 	}
 }
-

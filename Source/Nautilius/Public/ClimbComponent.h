@@ -26,7 +26,7 @@ public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	UPROPERTY(EditDefaultsOnly, Category="Climb")
-	float MaxRange = 200.f;
+	float MaxRange = 150.f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Climb")
 	float SurfaceDetectionRadius = 30.f;
@@ -42,6 +42,9 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Climb")
 	float AvailableSlopeAngle = 20.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Climb")
+	float AvailableClimbHeight = 60.f;
 
 	/** Time after climb when performing climb againg is impossible */
 	UPROPERTY(EditDefaultsOnly, Category = "Climb")
@@ -63,6 +66,8 @@ private:
 	float ClimbLength = 0.f;
 	float MoveForwardProgress = 0.f;
 	float AfterClimbRestProgress = 0.f;
+
+	const float CheckingDownwardDistance = 5.f;
 
 	void Climb(float DeltaTime);
 		
