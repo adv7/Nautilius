@@ -34,6 +34,7 @@
 #include "Styling/SlateStyleRegistry.h"
 #include "Styling/SlateTypes.h"
 #include "SlateOptMacros.h"
+#include "Styling/StyleColors.h"
 
 #define LOCTEXT_NAMESPACE HOUDINI_LOCTEXT_NAMESPACE 
 
@@ -160,6 +161,11 @@ FHoudiniEngineStyle::Initialize()
 	FString ViewportSyncOffIcon = IconsDir + TEXT("viewport_sync_off16x16.png");
 	FString ViewportSyncUnrealIcon = IconsDir + TEXT("viewport_sync_unreal16x16.png");
 	FString NodeSyncIcon = IconsDir + TEXT("icon_houdini_logo_16.png");
+	FString HoudiniToolsIcon = IconsDir + TEXT("icon_houdini_logo_16.png");
+	FString CurveClosedIcon = IconsDir + TEXT("curve_closed16x16.png");
+	FString CurveNotClosedIcon = IconsDir + TEXT("curve_not_closed16x16.png");
+	FString CurveReversedIcon = IconsDir + TEXT("curve_reversed16x16.png");
+	FString CurveNotReversedIcon = IconsDir + TEXT("curve_not_reversed16x16.png");
 
 	FString InfoIcon = IconsDir + TEXT("icon_hengine_logo_16.png");
 	FString SettingsIcon = _GetEditorStyle().GetBrush("Launcher.EditSettings")->GetResourceName().ToString();
@@ -180,9 +186,11 @@ FHoudiniEngineStyle::Initialize()
 	StyleSet->Set("HoudiniEngine._ViewportSyncHoudini", new FSlateImageBrush(ViewportSyncHoudiniIcon, Icon16x16));
 
 	StyleSet->Set("HoudiniEngine._OpenNodeSync", new FSlateImageBrush(NodeSyncIcon, Icon16x16));
+	StyleSet->Set("HoudiniEngine._OpenHoudiniTools", new FSlateImageBrush(HoudiniToolsIcon, Icon16x16));
 
 	StyleSet->Set("HoudiniEngine._InstallInfo", new FSlateImageBrush(InfoIcon, Icon16x16));
 	StyleSet->Set("HoudiniEngine._PluginSettings", new FSlateImageBrush(SettingsIcon, Icon16x16));
+	StyleSet->Set("HoudiniEngine._PluginEditorSettings", new FSlateImageBrush(SettingsIcon, Icon16x16));
 
 	StyleSet->Set("HoudiniEngine._OpenInHoudini", new FSlateImageBrush(OpenInHIcon, Icon16x16));
 	StyleSet->Set("HoudiniEngine._SaveHIPFile", new FSlateImageBrush(SaveToHipIcon, Icon16x16));
@@ -208,7 +216,14 @@ FHoudiniEngineStyle::Initialize()
 
 	StyleSet->Set("HoudiniEngine._Reset", new FSlateImageBrush(ResetIcon, Icon16x16));
 	StyleSet->Set("HoudiniEngine.DigitalAsset", new FSlateImageBrush(DigitalAssetIcon, Icon16x16));
+	StyleSet->Set("HoudiniEngine.AssetHelp", new FSlateImageBrush(AssetHelpIcon, Icon16x16));
 	StyleSet->Set("HoudiniEngine.PDGLink", new FSlateImageBrush(PDGLinkIcon, Icon16x16));
+
+	StyleSet->Set("HoudiniEngine._CurveClosed", new FSlateImageBrush(CurveClosedIcon, Icon16x16));
+	StyleSet->Set("HoudiniEngine._CurveNotClosed", new FSlateImageBrush(CurveNotClosedIcon, Icon16x16));
+	StyleSet->Set("HoudiniEngine._CurveReversed", new FSlateImageBrush(CurveReversedIcon, Icon16x16));
+	StyleSet->Set("HoudiniEngine._CurveNotReversed", new FSlateImageBrush(CurveNotReversedIcon, Icon16x16));
+
 
 	/*
 	FString StopIcon = FEditorStyle::GetBrush("PropertyWindow.Button_Clear")->GetResourceName().ToString();
@@ -309,6 +324,24 @@ FHoudiniEngineStyle::Initialize()
 	StyleSet->Set("HoudiniEngine.ThumbnailShadow", new BOX_BRUSH("ContentBrowser/ThumbnailShadow", FMargin(4.0f / 64.0f)));
 	StyleSet->Set("HoudiniEngine.ThumbnailBackground", new IMAGE_BRUSH("Common/ClassBackground_64x", FVector2D(64.f, 64.f), FLinearColor(0.75f, 0.75f, 0.75f, 1.0f)));
 
+	const FButtonStyle SimpleButton = FButtonStyle()
+		.SetNormal(FSlateNoResource())
+		.SetHovered(FSlateNoResource())
+		.SetPressed(FSlateNoResource())
+		// .SetHovered(FSlateRoundedBoxBrush(FStyleColors::Dropdown, 4.0f))
+		// .SetPressed(FSlateRoundedBoxBrush(FStyleColors::Dropdown, 4.0f))
+		.SetDisabled(FSlateNoResource())
+		.SetNormalForeground(FStyleColors::Foreground)
+		// .SetHoveredForeground(FStyleColors::ForegroundHover)
+		// .SetPressedForeground(FStyleColors::ForegroundHover)
+		.SetDisabledForeground(FStyleColors::Foreground)
+		.SetNormalPadding(CoreStyleConstants::ButtonMargins)
+		.SetPressedPadding(CoreStyleConstants::PressedButtonMargins);
+	
+	StyleSet->Set("HoudiniEngine.HelpButton", SimpleButton);
+
+
+	
 	// Register Slate style.
 	FSlateStyleRegistry::RegisterSlateStyle(*StyleSet.Get());
 };

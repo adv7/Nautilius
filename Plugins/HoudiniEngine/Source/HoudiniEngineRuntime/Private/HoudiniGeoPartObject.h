@@ -27,6 +27,7 @@
 #pragma once
 
 #include "HoudiniEngineRuntimeCommon.h"
+#include "HoudiniGenericAttribute.h"
 
 #include "HoudiniGeoPartObject.generated.h"
 
@@ -51,7 +52,9 @@ enum class EHoudiniPartType : uint8
 	Curve,
 	Volume,
 	DataTable,
-	LandscapeSpline
+	LandscapeSpline,
+	SkeletalMesh,
+	AnimSequence
 };
 
 UENUM()
@@ -63,7 +66,8 @@ enum class EHoudiniInstancerType : uint8
 	PackedPrimitive,
 	AttributeInstancer,
 	OldSchoolAttributeInstancer,
-	GeometryCollection
+	GeometryCollection,
+	MotionClip 
 };
 
 USTRUCT()
@@ -411,4 +415,11 @@ public:
 
 	// Cache of this HGPO split data
 	//TArray<FHoudiniSplitDataCache> SplitCache;
+
+	// Cached generic properties that we can pass through to the baking process
+	UPROPERTY()
+	TArray<FHoudiniGenericAttribute> GenericPropertyAttributes;
+	
+	UPROPERTY()
+	bool bKeepTags;
 };

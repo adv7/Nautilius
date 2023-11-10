@@ -35,7 +35,6 @@
 #include "HoudiniGeoPartObject.h"
 #include "HoudiniAsset.h"
 #include "HoudiniOutput.h"
-#include "HoudiniTool.h"
 
 #include "ContentBrowserModule.h"
 #include "IContentBrowserSingleton.h"
@@ -44,6 +43,7 @@
 #include "EditorViewportClient.h"
 #include "ActorFactories/ActorFactory.h"
 #include "FileHelpers.h"
+#include "HoudiniToolsEditor.h"
 #include "PropertyPathHelpers.h"
 #include "Components/SceneComponent.h"
 #include "UObject/UObjectIterator.h"
@@ -68,11 +68,26 @@ FHoudiniEngineEditorUtils::GetContentBrowserSelection(TArray< UObject* >& Conten
 		if (!IsValid(Object))
 			continue;
 
-		// Only static meshes are supported
-		if (Object->GetClass() != UStaticMesh::StaticClass())
-			continue;
+		bool bIncludeObject = false;
 
-		ContentBrowserSelection.Add(Object);
+		if (Object->GetClass() == UStaticMesh::StaticClass())
+		{
+			// Include if this is a static mesh
+			ContentBrowserSelection.Add(Object);
+			continue;
+		}
+
+		// Only static meshes are supported
+		if (Object->GetClass() == UBlueprint::StaticClass())
+		{
+			const UBlueprint* BlueprintObj = Cast<UBlueprint>(Object);
+			if (IsValid(BlueprintObj) && BlueprintObj->BlueprintType == EBlueprintType::BPTYPE_Normal)
+			{
+				// Include if this is a "normal" blueprint.
+				ContentBrowserSelection.Add(Object);
+				continue;
+			}
+		}
 	}
 
 	return ContentBrowserSelection.Num();
@@ -358,7 +373,7 @@ FHoudiniEngineEditorUtils::GetMeanWorldSelectionTransform()
 }
 
 void
-FHoudiniEngineEditorUtils::InstantiateHoudiniAsset(UHoudiniAsset* InHoudiniAsset, const EHoudiniToolType& InType, const EHoudiniToolSelectionType& InSelectionType)
+FHoudiniEngineEditorUtils::InstantiateHoudiniAsset(UHoudiniAsset* InHoudiniAsset, const EHoudiniToolType& InType, const EHoudiniToolSelectionType& InSelectionType, UHoudiniPreset* InPreset)
 {
 	if (!InHoudiniAsset)
 		return;
@@ -366,7 +381,7 @@ FHoudiniEngineEditorUtils::InstantiateHoudiniAsset(UHoudiniAsset* InHoudiniAsset
 	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
 
 	// Load the asset
-	UObject* AssetObj = Cast<UObject>(InHoudiniAsset);//InHoudiniAsset->LoadSynchronous();
+	UObject* AssetObj = Cast<UObject>(InHoudiniAsset);
 	if (!AssetObj)
 		return;
 
@@ -440,10 +455,26 @@ FHoudiniEngineEditorUtils::InstantiateHoudiniAsset(UHoudiniAsset* InHoudiniAsset
 			if (!HoudiniAssetComponent)
 				continue;
 
+			if (IsValid(InPreset))
+			{
+				HoudiniAssetComponent->QueuePreCookCallback([InPreset](UHoudiniAssetComponent* HAC)
+				{
+					// First apply the preset when we reach the PreCook phase.
+					if (IsValid(InPreset))
+					{
+						FHoudiniToolsEditor::ApplyPresetToHoudiniAssetComponent(InPreset, HAC);
+					}
+				});
+			}
+
 			// Create and set the input preset for this HDA and selected Object
 			TMap<UObject*, int32> InputPreset;
 			InputPreset.Add(CurrentSelectedObject, 0);
-			HoudiniAssetComponent->SetInputPresets(InputPreset);
+			HoudiniAssetComponent->QueuePreCookCallback([InputPreset](UHoudiniAssetComponent* HAC)
+			{
+				// Apply the inputs once the HDA has reached its PreCookCallback
+				FHoudiniToolsEditor::ApplyObjectsAsHoudiniAssetInputs(InputPreset, HAC);
+			});
 
 			// Select the Actor we just created
 			if (GEditor && GEditor->CanSelectActor(CreatedActor, true, false))
@@ -485,9 +516,27 @@ FHoudiniEngineEditorUtils::InstantiateHoudiniAsset(UHoudiniAsset* InHoudiniAsset
 					}
 				}
 
+				if (IsValid(InPreset))
+				{
+					HoudiniAssetComponent->QueuePreCookCallback([InPreset](UHoudiniAssetComponent* HAC)
+					{
+						// First apply the preset when we reach the PreCook phase.
+						if (IsValid(InPreset))
+						{
+							FHoudiniToolsEditor::ApplyPresetToHoudiniAssetComponent(InPreset, HAC);
+						}
+					});
+				}
+
 				// Set the input preset on the HoudiniAssetComponent
-				if (InputPresets.Num() > 0)
-					HoudiniAssetComponent->SetInputPresets(InputPresets);
+				if ( InputPresets.Num() > 0 )
+				{
+					HoudiniAssetComponent->QueuePreCookCallback([InputPresets](UHoudiniAssetComponent* HAC)
+					{
+						// Apply the inputs once the HDA has reached its PreCookCallback
+						FHoudiniToolsEditor::ApplyObjectsAsHoudiniAssetInputs(InputPresets, HAC);
+					});
+				}
 			}
 		}
 
@@ -501,7 +550,7 @@ FHoudiniEngineEditorUtils::InstantiateHoudiniAsset(UHoudiniAsset* InHoudiniAsset
 }
 
 AActor*
-FHoudiniEngineEditorUtils::InstantiateHoudiniAssetAt(UHoudiniAsset* InHoudiniAsset, const FTransform& InTransform, UWorld* InSpawnInWorld, ULevel* InSpawnInLevelOverride)
+FHoudiniEngineEditorUtils::InstantiateHoudiniAssetAt(UHoudiniAsset* InHoudiniAsset, const FTransform& InTransform, UWorld* InSpawnInWorld, ULevel* InSpawnInLevelOverride, UHoudiniPreset* InPreset)
 {
 	if (!InHoudiniAsset)
 		return nullptr;
@@ -509,7 +558,7 @@ FHoudiniEngineEditorUtils::InstantiateHoudiniAssetAt(UHoudiniAsset* InHoudiniAss
 	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
 
 	// Load the asset
-	UObject* AssetObj = Cast<UObject>(InHoudiniAsset);//InHoudiniAsset->LoadSynchronous();
+	UObject* AssetObj = Cast<UObject>(InHoudiniAsset);
 	if (!AssetObj)
 		return nullptr;
 
@@ -534,6 +583,23 @@ FHoudiniEngineEditorUtils::InstantiateHoudiniAssetAt(UHoudiniAsset* InHoudiniAss
 	AActor* CreatedActor = Factory->CreateActor(AssetObj, LevelToSpawnIn, InTransform);
 	if (!CreatedActor)
 		return nullptr;
+
+	if (IsValid(InPreset))
+	{
+		// If we have a preset, we have to apply it during PreCook
+		AHoudiniAssetActor* HACActor = Cast<AHoudiniAssetActor>(CreatedActor);
+		if (IsValid(HACActor))
+		{
+			UHoudiniAssetComponent* HoudiniAssetComponent = HACActor->GetHoudiniAssetComponent();
+			HoudiniAssetComponent->QueuePreCookCallback([InPreset](UHoudiniAssetComponent* HAC)
+			{
+				if (IsValid(InPreset))
+				{
+					FHoudiniToolsEditor::ApplyPresetToHoudiniAssetComponent(InPreset, HAC);
+				}
+			});
+		}
+	}
 
 	// Select the Actor we just created
 	if (GEditor->CanSelectActor(CreatedActor, true, true))
@@ -717,6 +783,11 @@ FHoudiniEngineEditorUtils::NotifyPostEditChangeProperty(FName InPropertyPath, UO
 	{
 		HOUDINI_LOG_WARNING(TEXT("Could not resolve property path '%s' on %s."), *InPropertyPath.ToString(), *(InRootObject->GetFullName()));
 	}
+}
+
+FString FHoudiniEngineEditorUtils::HoudiniEngineSavedDir()
+{
+	return FPaths::ProjectSavedDir() / "HoudiniEngine";
 }
 
 #undef LOCTEXT_NAMESPACE

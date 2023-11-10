@@ -38,10 +38,8 @@ public class HoudiniEngineRuntime : ModuleRules
         PrivatePCHHeaderFile = "Private/HoudiniEngineRuntimePrivatePCH.h";
 		PrecompileForTargets = PrecompileTargetsType.Any;
 
-        bUseUnity = false;
-
-        // Check if we are compiling for unsupported platforms.
-        if ( Target.Platform != UnrealTargetPlatform.Win64 &&
+		// Check if we are compiling for unsupported platforms.
+		if ( Target.Platform != UnrealTargetPlatform.Win64 &&
 			Target.Platform != UnrealTargetPlatform.Mac &&
 			Target.Platform != UnrealTargetPlatform.Linux /*&&
 			Target.Platform != UnrealTargetPlatform.Switch */)
@@ -66,6 +64,7 @@ public class HoudiniEngineRuntime : ModuleRules
 				"CoreUObject",
 				"Engine",
 				"RenderCore",
+				"ImageCore",
 				"InputCore",
 				"RHI",
 				"Foliage",
@@ -73,14 +72,15 @@ public class HoudiniEngineRuntime : ModuleRules
 				"MeshUtilitiesCommon",
 				"Chaos",
 				"GeometryCollectionEngine"
-			 }
+			}
 		);
 
-	   PrivateDependencyModuleNames.AddRange(
+        PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
 				"Landscape",
-				"PhysicsCore"
+				"PhysicsCore",
+				"DeveloperSettings"
             }
 		);
 
@@ -92,7 +92,8 @@ public class HoudiniEngineRuntime : ModuleRules
 					"UnrealEd",
 					"Kismet",
 					"EditorFramework",
-					"SubobjectEditor"
+					"SubobjectEditor",
+					"Json"
 				}
 			);
 		}

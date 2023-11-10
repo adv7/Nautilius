@@ -40,9 +40,12 @@
 #include "HoudiniPDGAssetLink.h"
 #include "HoudiniEngineRuntime.h"
 #include "HoudiniStaticMeshComponent.h"
-#include "HoudiniCompatibilityHelpers.h"
 #include "HoudiniInstancedActorComponent.h"
 #include "HoudiniMeshSplitInstancerComponent.h"
+
+#if WITH_EDITOR
+#include "HoudiniEditorAssetStateSubsystemInterface.h"
+#endif
 
 #include "Engine/StaticMesh.h"
 #include "Components/StaticMeshComponent.h"
@@ -58,6 +61,7 @@
 #include "UObject/UObjectGlobals.h"
 #include "BodySetupEnums.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
+#include "Materials/MaterialInstance.h"
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 3
 	#include "GeometryCollection/GeometryCollectionComponent.h"
 #else
@@ -120,37 +124,18 @@ UHoudiniAssetComponent::Serialize(FArchive& Ar)
 
 	if (bLegacyComponent)
 	{
-		const UHoudiniRuntimeSettings * HoudiniRuntimeSettings = GetDefault<UHoudiniRuntimeSettings>();
-		bool bEnableBackwardCompatibility = HoudiniRuntimeSettings->bEnableBackwardCompatibility;
+		// Skip the v1 object
+		HOUDINI_LOG_WARNING(TEXT("Loading deprecated version of UHoudiniAssetComponent : serialization will be skipped."));
 
-		// Legacy serialization
-		// Either try to convert or skip depending the setting value
-		if (bEnableBackwardCompatibility)
+		Super::Serialize(Ar);
+
+		// Skip v1 Serialized data
+		if (FLinker* Linker = Ar.GetLinker())
 		{
-			// Attemp to convert the v1 object to v2
-			HOUDINI_LOG_WARNING(TEXT("Loading deprecated version of UHoudiniAssetComponent : converting v1 object to v2."));
-
-			Super::Serialize(Ar);
-			// Deserialize the legacy data, we'll do the actual conversion in PostLoad()
-			// After everything has been deserialized
-			Version1CompatibilityHAC = NewObject<UHoudiniAssetComponent_V1>(this);
-			Version1CompatibilityHAC->Serialize(Ar);
-		}
-		else
-		{
-			// Skip the v1 object
-			HOUDINI_LOG_WARNING(TEXT("Loading deprecated version of UHoudiniAssetComponent : serialization will be skipped."));
-
-			Super::Serialize(Ar);
-
-			// Skip v1 Serialized data
-			if (FLinker* Linker = Ar.GetLinker())
-			{
-				int32 const ExportIndex = this->GetLinkerIndex();
-				FObjectExport& Export = Linker->ExportMap[ExportIndex];
-				Ar.Seek(InitialOffset + Export.SerialSize);
-				return;
-			}
+			int32 const ExportIndex = this->GetLinkerIndex();
+			FObjectExport& Export = Linker->ExportMap[ExportIndex];
+			Ar.Seek(InitialOffset + Export.SerialSize);
+			return;
 		}
 	}
 	else
@@ -158,472 +143,6 @@ UHoudiniAssetComponent::Serialize(FArchive& Ar)
 		// Normal v2 serialization
 		Super::Serialize(Ar);
 	}
-}
-
-bool
-UHoudiniAssetComponent::ConvertLegacyData()
-{
-	if (!IsValid(Version1CompatibilityHAC))
-		return false;
-
-	// Set the Houdini Asset
-	if (!IsValid(Version1CompatibilityHAC->HoudiniAsset))
-		return false;
-
-	HoudiniAsset = Version1CompatibilityHAC->HoudiniAsset;
-
-	// Convert all parameters
-	for (auto& LegacyParmPair : Version1CompatibilityHAC->Parameters)
-	{
-		if (!LegacyParmPair.Value)
-			continue;
-
-		UHoudiniParameter* Parm = LegacyParmPair.Value->ConvertLegacyData(this);
-		LegacyParmPair.Value->CopyLegacyParameterData(Parm);
-		Parameters.Add(Parm);
-	}
-
-	// Convert all inputs
-	for (auto& LegacyInput : Version1CompatibilityHAC->Inputs)
-	{
-		// Convert v1 input to v2
-		UHoudiniInput* Input = LegacyInput->ConvertLegacyInput(this);
-		
-		Inputs.Add(Input);
-	}
-
-	// Lambdas for finding/creating outputs from an HGPO
-	auto FindOrCreateOutput = [&](FHoudiniGeoPartObject& InNewHGPO, bool& bNew)
-	{
-		UHoudiniOutput* NewOutput = nullptr;
-
-		// See if we can add to an existing output
-		UHoudiniOutput** FoundOutput = nullptr;
-		FoundOutput = Outputs.FindByPredicate(
-			[InNewHGPO](UHoudiniOutput* Output) { return Output ? Output->HasHoudiniGeoPartObject(InNewHGPO) : false; });
-
-		if (FoundOutput && IsValid(*FoundOutput))
-		{
-			// FoundOutput is valid, add to it
-			NewOutput = *FoundOutput;
-			bNew = false;
-		}
-		else
-		{
-			// Create a new output object
-			NewOutput = NewObject<UHoudiniOutput>(
-				this, UHoudiniOutput::StaticClass(), NAME_None, RF_NoFlags);
-			bNew = true;
-		}
-
-		return NewOutput;
-	};
-
-
-	// Convert all outputs
-	// Start by handling the Static Meshes
-	for (auto& LegacySM : Version1CompatibilityHAC->StaticMeshes)
-	{
-		// Convert the legacy HGPO to a v2 HGPO
-		FHoudiniGeoPartObject NewHGPO = LegacySM.Key.ConvertLegacyData();
-		
-
-		bool bCreatedNew = false;
-		UHoudiniOutput* NewOutput = FindOrCreateOutput(NewHGPO, bCreatedNew);
-		if (!IsValid(NewOutput))
-			continue;
-
-		// Add the HGPO if we've just created it
-		if (bCreatedNew)
-		{
-			NewOutput->AddNewHGPO(NewHGPO);
-			// Mark if the HoudiniOutput is editable
-			NewOutput->SetIsEditableNode(NewHGPO.bIsEditable);
-		}
-
-		// Build a new output object identifier
-		FHoudiniOutputObjectIdentifier Identifier(NewHGPO.ObjectId, NewHGPO.GeoId, NewHGPO.PartId, NewHGPO.SplitGroups[0]);
-		Identifier.bLoaded = true;
-		Identifier.PartName = NewHGPO.PartName;
-
-		// Build/Update the  output object
-		FHoudiniOutputObject& OutputObj = NewOutput->GetOutputObjects().FindOrAdd(Identifier);
-		OutputObj.OutputObject = LegacySM.Value;
-		OutputObj.OutputComponents.Empty();
-		OutputObj.ProxyObject = nullptr;
-		OutputObj.ProxyComponent = nullptr;
-		OutputObj.bProxyIsCurrent = false;
-
-		// Handle the SMC for this SM / HGPO
-		if (IsValid(LegacySM.Value))
-		{
-			UStaticMeshComponent** FoundSMC = Version1CompatibilityHAC->StaticMeshComponents.Find(LegacySM.Value);
-			if (FoundSMC && IsValid(*FoundSMC))
-			{
-				OutputObj.OutputComponents.Empty();
-				OutputObj.OutputComponents.Add(*FoundSMC);
-			}
-		}
-
-		// Add to the outputs
-		Outputs.AddUnique(NewOutput);
-
-		//NewOutput->StaleCount;
-		//NewOutput->bLandscapeWorldComposition;
-		//NewOutput->HoudiniCreatedSocketActors;
-		//NewOutput->HoudiniAttachedSocketActors;
-		//NewOutput->bHasEditableNodeBuilt - false;
-	}
-
-	// ... then Landscapes
-	for (auto& LegacyLandscape : Version1CompatibilityHAC->LandscapeComponents)
-	{
-		// Convert the legacy HGPO to a v2 HGPO
-		FHoudiniGeoPartObject NewHGPO = LegacyLandscape.Key.ConvertLegacyData();
-
-		bool bCreatedNew = false;
-		UHoudiniOutput* NewOutput = FindOrCreateOutput(NewHGPO, bCreatedNew);
-		if (!IsValid(NewOutput))
-			continue;
-
-		// Add the HGPO if we've just created it
-		if (bCreatedNew)
-		{
-			NewOutput->AddNewHGPO(NewHGPO);
-			// Mark if the HoudiniOutput is editable
-			NewOutput->SetIsEditableNode(NewHGPO.bIsEditable);
-		}
-
-		// Build a new output object identifier
-		FHoudiniOutputObjectIdentifier Identifier(NewHGPO.ObjectId, NewHGPO.GeoId, NewHGPO.PartId, NewHGPO.SplitGroups[0]);
-		Identifier.bLoaded = true;
-		Identifier.PartName = NewHGPO.PartName;
-
-		// Build/Update the  output object
-		FHoudiniOutputObject& OutputObj = NewOutput->GetOutputObjects().FindOrAdd(Identifier);
-
-		// We need to create a LandscapePtr wrapper for the landscaope
-		UHoudiniLandscapePtr* LandscapePtr = NewObject<UHoudiniLandscapePtr>(NewOutput);
-		LandscapePtr->SetSoftPtr(LegacyLandscape.Value.IsValid() ? LegacyLandscape.Value.Get() : nullptr);
-
-		OutputObj.OutputObject = LandscapePtr;
-		OutputObj.OutputComponents.Empty();
-		OutputObj.ProxyObject = nullptr;
-		OutputObj.ProxyComponent = nullptr;
-		OutputObj.bProxyIsCurrent = false;
-		
-		// Add to the outputs
-		Outputs.AddUnique(NewOutput);
-	}
-
-	// ... instancers
-	for (auto& LegacyInstanceIn : Version1CompatibilityHAC->InstanceInputs)
-	{
-		if (!IsValid(LegacyInstanceIn))
-			continue;
-
-		FHoudiniGeoPartObject InstancerHGPO = LegacyInstanceIn->HoudiniGeoPartObject.ConvertLegacyData();
-		
-		// Prepare this output object's output identifier
-		FHoudiniOutputObjectIdentifier OutputIdentifier;
-		OutputIdentifier.ObjectId = InstancerHGPO.ObjectId;
-		OutputIdentifier.GeoId = InstancerHGPO.GeoId;
-		OutputIdentifier.PartId = InstancerHGPO.PartId;
-		OutputIdentifier.PartName = InstancerHGPO.PartName;
-
-		EHoudiniInstancerType InstancerType = EHoudiniInstancerType::ObjectInstancer;
-		if (LegacyInstanceIn->Flags.bIsPackedPrimitiveInstancer)
-			InstancerType = EHoudiniInstancerType::PackedPrimitive;
-		else if (LegacyInstanceIn->Flags.bAttributeInstancerOverride)
-			InstancerType = EHoudiniInstancerType::AttributeInstancer;
-		else if (LegacyInstanceIn->Flags.bIsAttributeInstancer)
-			InstancerType = EHoudiniInstancerType::OldSchoolAttributeInstancer;
-		else if (LegacyInstanceIn->ObjectToInstanceId >= 0)
-			InstancerType = EHoudiniInstancerType::ObjectInstancer;
-
-		InstancerHGPO.InstancerType = InstancerType;
-
-		//bool bIsMSIC = LegacyInstanceIn->Flags.bIsSplitMeshInstancer;		
-
-		bool bCreatedNew = false;
-		UHoudiniOutput* NewOutput = FindOrCreateOutput(InstancerHGPO, bCreatedNew);
-		if (!IsValid(NewOutput))
-			continue;
-
-		// Add the HGPO if we've just created it
-		if (bCreatedNew)
-		{
-			NewOutput->AddNewHGPO(InstancerHGPO);
-		}
-
-		// Get the output's instanced outputs
-		TMap<FHoudiniOutputObjectIdentifier, FHoudiniInstancedOutput>& InstancedOutputs = NewOutput->GetInstancedOutputs();
-
-		int32 InstFieldIdx = 0;
-		for (auto& LegacyInstanceInputField : LegacyInstanceIn->InstanceInputFields)
-		{	
-			FHoudiniGeoPartObject InstInputFieldHGPO = LegacyInstanceInputField->HoudiniGeoPartObject.ConvertLegacyData();
-
-			// Create an instanced output for this object
-			FHoudiniInstancedOutput NewInstOut;
-			NewInstOut.OriginalObject = LegacyInstanceInputField->OriginalObject;
-			NewInstOut.OriginalObjectIndex = -1;
-			NewInstOut.OriginalTransforms = LegacyInstanceInputField->InstancedTransforms;
-
-			for (auto& InstObj : LegacyInstanceInputField->InstancedObjects)
-				NewInstOut.VariationObjects.Add(InstObj);
-
-			int32 NumVar = LegacyInstanceInputField->RotationOffsets.Num();
-			for (int32 Idx = 0; Idx < NumVar; Idx++)
-			{
-				FTransform TransOffset;
-				TransOffset.SetLocation(FVector3d::ZeroVector);
-				if (LegacyInstanceInputField->RotationOffsets.IsValidIndex(Idx))
-					TransOffset.SetRotation(LegacyInstanceInputField->RotationOffsets[Idx].Quaternion());
-
-				if (LegacyInstanceInputField->ScaleOffsets.IsValidIndex(Idx))
-					TransOffset.SetScale3D(LegacyInstanceInputField->ScaleOffsets[Idx]);
-
-				NewInstOut.VariationTransformOffsets.Add(TransOffset);
-			}
-
-			// Build an identifier for the instance output
-			FHoudiniOutputObjectIdentifier Identifier;
-			Identifier.ObjectId = InstInputFieldHGPO.ObjectId;
-			Identifier.GeoId = InstInputFieldHGPO.GeoId;
-			Identifier.PartId = InstInputFieldHGPO.PartId;
-			Identifier.PartName = InstInputFieldHGPO.PartName;
-			Identifier.SplitIdentifier = FString::FromInt(InstFieldIdx);
-			Identifier.bLoaded = true;
-
-			// Add the instance output to the outputs
-			InstancedOutputs.Add(Identifier, NewInstOut);
-
-			// Now create an Output object for each variation
-			int32 VarIdx = 0;
-			for (auto& LegacyComp : LegacyInstanceInputField->InstancerComponents)
-			{
-				// Build a new output object identifier for this variation
-				FHoudiniOutputObjectIdentifier VarIdentifier;
-				VarIdentifier.ObjectId = InstInputFieldHGPO.ObjectId;
-				VarIdentifier.GeoId = InstInputFieldHGPO.GeoId;
-				VarIdentifier.PartId = InstInputFieldHGPO.PartId;
-				VarIdentifier.PartName = InstInputFieldHGPO.PartName;
-				// Update the split identifier for this object
-				// We use both the original object index and the variation index: ORIG_VAR
-				VarIdentifier.SplitIdentifier =
-					FString::FromInt(InstFieldIdx) + TEXT("_") + FString::FromInt(VarIdx);
-				VarIdentifier.bLoaded = true;
-
-				// Build/Update the output object
-				FHoudiniOutputObject& OutputObj = NewOutput->GetOutputObjects().FindOrAdd(VarIdentifier);
-
-				OutputObj.OutputObject = nullptr;
-				OutputObj.OutputComponents.Empty();
-				OutputObj.OutputComponents.Add(LegacyComp);
-				OutputObj.ProxyObject = nullptr;
-				OutputObj.ProxyComponent = nullptr;
-				OutputObj.bProxyIsCurrent = false;
-
-				VarIdx++;
-			}
-
-			// ???
-			//LegacyInstanceInputField->VariationTransformsArray;
-			//LegacyInstanceInputField->InstanceColorOverride;
-			//LegacyInstanceInputField->VariationInstanceColorOverrideArray;
-			
-			// Index of the variation used for each transform
-			//NewInstOut.TransformVariationIndices;
-			//NewInstOut.bUniformScaleLocked = false;
-
-			InstFieldIdx++;
-		}
-
-		// Add to the outputs
-		Outputs.AddUnique(NewOutput);
-	}
-
-	// ... then Spline Components (for Curve IN)
-	for (auto& LegacyCurve : Version1CompatibilityHAC->SplineComponents)
-	{
-		UHoudiniSplineComponent* CurSplineComp = LegacyCurve.Value;
-		if (!IsValid(CurSplineComp))
-			continue;
-
-		// TODO: Needed?
-		// Attach the spline to the HAC
-		CurSplineComp->AttachToComponent(this, FAttachmentTransformRules::KeepRelativeTransform);
-
-		// Editable curve? / Should create an output for it!
-		if (CurSplineComp->IsEditableOutputCurve())
-		{
-			FHoudiniGeoPartObject CurHGPO = LegacyCurve.Key.ConvertLegacyData();
-
-			// Look for an output for that HGPO
-			bool bCreatedNew = false;
-			UHoudiniOutput* NewOutput = FindOrCreateOutput(CurHGPO, bCreatedNew);
-			if (!IsValid(NewOutput))
-				continue;
-
-			// Add the HGPO if we've just created it
-			if (bCreatedNew)
-			{
-				NewOutput->AddNewHGPO(CurHGPO);
-			}
-
-			// Build an output object id for the editable curve output
-			FHoudiniOutputObjectIdentifier EditableSplineComponentIdentifier;
-			EditableSplineComponentIdentifier.ObjectId = CurHGPO.ObjectId;
-			EditableSplineComponentIdentifier.GeoId = CurHGPO.GeoId;
-			EditableSplineComponentIdentifier.PartId = CurHGPO.PartId;
-			EditableSplineComponentIdentifier.PartName = CurHGPO.PartName;
-
-			TMap<FHoudiniOutputObjectIdentifier, FHoudiniOutputObject>& OutputObjects = NewOutput->GetOutputObjects();
-			FHoudiniOutputObject& FoundOutputObject = OutputObjects.FindOrAdd(EditableSplineComponentIdentifier);
-			FoundOutputObject.OutputComponents.Empty();
-			FoundOutputObject.OutputComponents.Add(CurSplineComp);
-
-			//CurSplineComp->SetHasEditableNodeBuilt(true);
-			CurSplineComp->SetIsInputCurve(false);
-		}
-		else
-		{
-			// Input!
-			// Conversion of the inputs should have done the job already
-			CurSplineComp->SetIsInputCurve(true);
-		}
-	}
-
-	// ... Handles
-	for (auto& LegacyHandle : Version1CompatibilityHAC->HandleComponents)
-	{
-		// TODO: Handles!!
-		UHoudiniHandleComponent* NewHandle = nullptr;
-		HandleComponents.Add(NewHandle);
-	}
-
-	// ... Materials
-	UHoudiniAssetComponentMaterials_V1* LegacyMaterials = Version1CompatibilityHAC->HoudiniAssetComponentMaterials;
-	if(IsValid(LegacyMaterials))
-	{
-		// Assignements: Apply to all outputs since they're not tied to an HGPO...
-		for (auto& CurOutput : Outputs)
-		{
-			TMap<FString, UMaterialInterface*>& CurrAssign = CurOutput->GetAssignementMaterials();
-			for (auto& LegacyMaterial : LegacyMaterials->Assignments)
-			{
-				CurrAssign.Add(LegacyMaterial.Key, LegacyMaterial.Value);
-			}
-		}
-
-		// Replacements
-		// Try to find the output matching the HGPO
-		for (auto& LegacyMaterial : LegacyMaterials->Replacements)
-		{
-			// Convert the legacy HGPO to a v2 HGPO
-			FHoudiniGeoPartObject NewHGPO = LegacyMaterial.Key.ConvertLegacyData();
-
-			TMap<FString, UMaterialInterface*>& LegacyReplacement = LegacyMaterial.Value;
-
-			bool bCreatedNew = false;
-			UHoudiniOutput* NewOutput = FindOrCreateOutput(NewHGPO, bCreatedNew);
-			if (!IsValid(NewOutput))
-				continue;
-
-			if (bCreatedNew)
-				continue;
-
-			TMap<FString, UMaterialInterface*>& CurReplacement = NewOutput->GetReplacementMaterials();
-			for (auto& CurLegacyReplacement : LegacyReplacement)
-			{
-				CurReplacement.Add(CurLegacyReplacement.Key, CurLegacyReplacement.Value);
-			}
-		}
-	}
-
-
-	// ... Bake Name overrides
-	for (auto& LegacyBakeNameOverride : Version1CompatibilityHAC->BakeNameOverrides)
-	{
-		// In Outputs?
-	}
-
-	// ... then Downstream asset connections (due to Asset inputs)
-	for (auto& LegacyDownstreamHAC : Version1CompatibilityHAC->DownstreamAssetConnections)
-	{
-		//TSet<UHoudiniAssetComponent*> DownstreamHoudiniAssets;
-	}
-
-	// Then convert all remaing flags and properties
-	StaticMeshGenerationProperties.bGeneratedDoubleSidedGeometry = Version1CompatibilityHAC->bGeneratedDoubleSidedGeometry;
-	StaticMeshGenerationProperties.GeneratedPhysMaterial = Version1CompatibilityHAC->GeneratedPhysMaterial;
-	StaticMeshGenerationProperties.DefaultBodyInstance = Version1CompatibilityHAC->DefaultBodyInstance;
-	StaticMeshGenerationProperties.GeneratedCollisionTraceFlag = Version1CompatibilityHAC->GeneratedCollisionTraceFlag;
-	StaticMeshGenerationProperties.GeneratedLightMapResolution = Version1CompatibilityHAC->GeneratedLightMapResolution;
-	StaticMeshGenerationProperties.GeneratedWalkableSlopeOverride = Version1CompatibilityHAC->GeneratedWalkableSlopeOverride;
-	StaticMeshGenerationProperties.GeneratedLightMapCoordinateIndex = Version1CompatibilityHAC->GeneratedLightMapCoordinateIndex;
-	StaticMeshGenerationProperties.bGeneratedUseMaximumStreamingTexelRatio = Version1CompatibilityHAC->bGeneratedUseMaximumStreamingTexelRatio;
-	StaticMeshGenerationProperties.GeneratedStreamingDistanceMultiplier = Version1CompatibilityHAC->GeneratedStreamingDistanceMultiplier;
-	//StaticMeshGenerationProperties.GeneratedFoliageDefaultSettings = Version1CompatibilityHAC->GeneratedFoliageDefaultSettings;
-	StaticMeshGenerationProperties.GeneratedAssetUserData = Version1CompatibilityHAC->GeneratedAssetUserData;
-
-	StaticMeshBuildSettings.DistanceFieldResolutionScale = Version1CompatibilityHAC->GeneratedDistanceFieldResolutionScale;
-
-	BakeFolder.Path = Version1CompatibilityHAC->BakeFolder.ToString();
-	TemporaryCookFolder.Path = Version1CompatibilityHAC->TempCookFolder.ToString();
-
-	ComponentGUID = Version1CompatibilityHAC->ComponentGUID;
-
-	bEnableCooking = Version1CompatibilityHAC->bEnableCooking;
-	bUploadTransformsToHoudiniEngine = Version1CompatibilityHAC->bUploadTransformsToHoudiniEngine;
-	bCookOnTransformChange = Version1CompatibilityHAC->bTransformChangeTriggersCooks;
-	bCookOnParameterChange = true;
-	//Version1CompatibilityHAC->bCookingTriggersDownstreamCooks;
-	bCookOnAssetInputCook = true;
-	bOutputless = false;
-	bOutputTemplateGeos = false;
-	bUseOutputNodes = false;
-	bFullyLoaded = Version1CompatibilityHAC->bFullyLoaded;
-
-	//bContainsHoudiniLogoGeometry = Version1CompatibilityHAC->bContainsHoudiniLogoGeometry;
-	//bIsNativeComponent = Version1CompatibilityHAC->bIsNativeComponent;
-	//bIsPreviewComponent = Version1CompatibilityHAC->bIsPreviewComponent;
-	//bLoadedComponent = Version1CompatibilityHAC->bLoadedComponent;
-	//bIsPlayModeActive_Unused = Version1CompatibilityHAC->bIsPlayModeActive_Unused;
-	//Version1CompatibilityHAC->bTimeCookInPlaymode_Unused;
-	//Version1CompatibilityHAC->bUseHoudiniMaterials;	
-
-	//Version1CompatibilityHAC->GeneratedGeometryScaleFactor;
-	//Version1CompatibilityHAC->TransformScaleFactor;
-	//Version1CompatibilityHAC->PresetBuffer;
-	//Version1CompatibilityHAC->DefaultPresetBuffer;
-	//Version1CompatibilityHAC->ParameterByName;
-
-	// Now that we're done, update all the output's types
-	for (auto& CurOutput : Outputs)
-	{
-		CurOutput->UpdateOutputType();
-	}
-
-	//
-	// Clean up the legacy HAC
-	//
-
-	Version1CompatibilityHAC->Parameters.Empty();
-	Version1CompatibilityHAC->Inputs.Empty();
-	Version1CompatibilityHAC->StaticMeshes.Empty();
-	Version1CompatibilityHAC->LandscapeComponents.Empty();
-	Version1CompatibilityHAC->InstanceInputs.Empty();
-	Version1CompatibilityHAC->SplineComponents.Empty();
-	Version1CompatibilityHAC->HandleComponents.Empty();
-	//Version1CompatibilityHAC->HoudiniAssetComponentMaterials.Empty();
-	Version1CompatibilityHAC->BakeNameOverrides.Empty();
-	Version1CompatibilityHAC->DownstreamAssetConnections.Empty();
-	Version1CompatibilityHAC->MarkAsGarbage();
-	Version1CompatibilityHAC = nullptr;
-
-	return true;
 }
 
 
@@ -705,7 +224,8 @@ UHoudiniAssetComponent::UHoudiniAssetComponent(const FObjectInitializer & Object
 	}
 	
 	bNoProxyMeshNextCookRequested = false;
-	bBakeAfterNextCook = false;
+	bBakeAfterNextCook_DEPRECATED = false;
+	BakeAfterNextCook = EHoudiniBakeAfterNextCook::Disabled;
 
 #if WITH_EDITORONLY_DATA
 	bGenerateMenuExpanded = true;
@@ -949,6 +469,11 @@ UHoudiniAssetComponent::OnHoudiniAssetChanged()
 	bForceNeedUpdate = true;
 }
 
+void UHoudiniAssetComponent::QueuePreCookCallback(const TFunction<void(UHoudiniAssetComponent*)>& CallbackFn)
+{
+	PreCookCallbacks.Add(CallbackFn);
+}
+
 bool
 UHoudiniAssetComponent::NeedUpdateParameters() const
 {
@@ -970,8 +495,7 @@ UHoudiniAssetComponent::NeedUpdateParameters() const
 		// (because it has failed to upload previously or has been loaded)
 		if (!CurrentParm->NeedsToTriggerUpdate())
 			continue;
-
-		HOUDINI_LOG_DISPLAY(TEXT("[UHoudiniAssetComponent::NeedUpdateParameters()] Parameters need update for component: %s"), *(GetPathName()));
+		
 		return true;
 	}
 
@@ -1224,8 +748,9 @@ UHoudiniAssetComponent::NotifyCookedToDownstreamAssets()
 					continue;
 
 				EHoudiniInputType CurrentDownstreamInputType = CurrentDownstreamInput->GetInputType();
-				if (CurrentDownstreamInputType != EHoudiniInputType::Asset
-					&& CurrentDownstreamInputType != EHoudiniInputType::World)
+				
+				// Require an asset input type, not just all World/NewWorld
+				if (!CurrentDownstreamInput->IsAssetInput())
 					continue;
 
 				// Ensure that we are an input object of that input
@@ -1286,7 +811,7 @@ UHoudiniAssetComponent::NeedsToWaitForInputHoudiniAssets()
 
 		EHoudiniInputType CurrentInputType = CurrentInput->GetInputType();
 
-		if(CurrentInputType != EHoudiniInputType::Asset && CurrentInputType != EHoudiniInputType::World)
+		if (!CurrentInput->IsAssetInput())
 			continue;
 
 		TArray<UHoudiniInputObject*>* ObjectArray = CurrentInput->GetHoudiniInputObjectArray(CurrentInputType);
@@ -1490,6 +1015,9 @@ UHoudiniAssetComponent::MarkAsNeedRebuild()
 		}
 	}
 
+	// Uncomment this for building regression tests that need a clean output.
+	//Outputs.Empty();
+
 	// We need to mark all our inputs as changed/trigger update
 	for (auto CurrentInput : Inputs)
 	{
@@ -1585,26 +1113,8 @@ UHoudiniAssetComponent::PostLoad()
 {
 	Super::PostLoad();
 
-	const UHoudiniRuntimeSettings * HoudiniRuntimeSettings = GetDefault<UHoudiniRuntimeSettings>();
-	bool bEnableBackwardCompatibility = HoudiniRuntimeSettings->bEnableBackwardCompatibility;
-	bool bAutomaticLegacyHDARebuild = HoudiniRuntimeSettings->bAutomaticLegacyHDARebuild;
-
-	// Legacy serialization: either try to convert or skip depending the setting value
-	if (bEnableBackwardCompatibility && Version1CompatibilityHAC != nullptr)
-	{
-		// If we have deserialized legacy v1 data, attempt to convert it now
-		ConvertLegacyData();
-
-		if (bAutomaticLegacyHDARebuild)
-			MarkAsNeedRebuild();
-		else
-			MarkAsNeedInstantiation();
-	}
-	else
-	{
-		// Normal v2 objet, mark as need instantiation
-		MarkAsNeedInstantiation();
-	}
+	// Mark as need instantiation
+	MarkAsNeedInstantiation();
 
 	// Component has been loaded, not duplicated
 	bHasBeenDuplicated = false;
@@ -1640,6 +1150,23 @@ UHoudiniAssetComponent::PostLoad()
 	{
 		// User should see this message once when loading an old asset.
 		HOUDINI_LOG_MESSAGE(TEXT("Upgraded deprecated single component in FHoudiniOutputObject"));
+	}
+#if WITH_EDITORONLY_DATA
+	auto MaxValue = StaticEnum<EHoudiniEngineBakeOption>()->GetMaxEnumValue() - 1;
+
+	if (static_cast<int>(HoudiniEngineBakeOption) > MaxValue)
+	{
+		HOUDINI_LOG_WARNING(TEXT("Invalid Bake Type found, setting to To Actor. Possibly Foliage, which is deprecated, use the unreal_foliage attribute instead."));
+		HoudiniEngineBakeOption = EHoudiniEngineBakeOption::ToActor;
+	}
+#endif
+
+	// Handle deprecated bBakeAfterNextCook: default value is false, so if it is true in PostLoad then it was saved
+	// as true (pre-deprecation)
+	if (bBakeAfterNextCook_DEPRECATED)
+	{
+		bBakeAfterNextCook_DEPRECATED = false;
+		BakeAfterNextCook = EHoudiniBakeAfterNextCook::Always;
 	}
 }
 
@@ -1686,6 +1213,10 @@ UHoudiniAssetComponent::UpdatePostDuplicate()
 	for (auto & NextChild : Children) 
 	{
 		if (!IsValid(NextChild))
+			continue;
+
+		// We don't want to remove components that were added in a Blueprint Template
+		if (NextChild->IsCreatedByConstructionScript())
 			continue;
 
 		USceneComponent * ComponentToRemove = nullptr;
@@ -2736,9 +2267,6 @@ UHoudiniAssetComponent::HasAnyOutputComponent() const
 bool
 UHoudiniAssetComponent::HasOutputObject(UObject* InOutputObjectToFind) const
 {
-	if (!IsValid(InOutputObjectToFind))
-		return false;
-
 	for (const auto& CurOutput : Outputs)
 	{
 		for (const auto& CurOutputObject : CurOutput->GetOutputObjects())
@@ -2796,130 +2324,6 @@ UHoudiniAssetComponent::IsHoudiniCookedDataAvailable(bool &bOutNeedsRebuildOrDel
 
 	return false;
 }
-
-void
-UHoudiniAssetComponent::SetInputPresets(const TMap<UObject*, int32>& InPresets)
-{
-	// Set the input preset for this HAC
-#if WITH_EDITOR
-	InputPresets = InPresets;
-#endif
-}
-
-
-void
-UHoudiniAssetComponent::ApplyInputPresets()
-{
-	if (InputPresets.Num() <= 0)
-		return;
-
-#if WITH_EDITOR
-	// Ignore inputs that have been preset to curve
-	TArray<UHoudiniInput*> InputArray;
-	for (auto CurrentInput : Inputs)
-	{
-		if (!IsValid(CurrentInput))
-			continue;
-
-		if (CurrentInput->GetInputType() != EHoudiniInputType::Curve)
-			InputArray.Add(CurrentInput);
-	}
-
-	// Try to apply the supplied Object to the Input
-	for (TMap< UObject*, int32 >::TIterator IterToolPreset(InputPresets); IterToolPreset; ++IterToolPreset)
-	{
-		UObject * Object = IterToolPreset.Key();
-		if (!IsValid(Object))
-			continue;
-
-		int32 InputNumber = IterToolPreset.Value();
-		if (!InputArray.IsValidIndex(InputNumber))
-			continue;
-
-		// If the object is a landscape, add a new landscape input
-		if (Object->IsA<ALandscapeProxy>())
-		{
-			// selecting a landscape 
-			int32 InsertNum = InputArray[InputNumber]->GetNumberOfInputObjects(EHoudiniInputType::Landscape);
-			if (InsertNum == 0)
-			{
-				// Landscape inputs only support one object!
-				InputArray[InputNumber]->SetInputObjectAt(EHoudiniInputType::Landscape, InsertNum, Object);
-			}
-		}
-
-		// If the object is an actor, add a new world input
-		if (Object->IsA<AActor>())
-		{
-			// selecting an actor 
-			int32 InsertNum = InputArray[InputNumber]->GetNumberOfInputObjects(EHoudiniInputType::World);
-			InputArray[InputNumber]->SetInputObjectAt(EHoudiniInputType::World, InsertNum, Object);
-		}
-
-		// If the object is a static mesh, add a new geometry input (TODO: or BP ? )
-		if (Object->IsA<UStaticMesh>())
-		{
-			// selecting a Staticn Mesh
-			int32 InsertNum = InputArray[InputNumber]->GetNumberOfInputObjects(EHoudiniInputType::Geometry);
-			InputArray[InputNumber]->SetInputObjectAt(EHoudiniInputType::Geometry, InsertNum, Object);
-		}
-
-		if (Object->IsA<AHoudiniAssetActor>())
-		{
-			// selecting a Houdini Asset 
-			int32 InsertNum = InputArray[InputNumber]->GetNumberOfInputObjects(EHoudiniInputType::Asset);
-			if (InsertNum == 0)
-			{
-				// Assert inputs only support one object!
-				InputArray[InputNumber]->SetInputObjectAt(EHoudiniInputType::Asset, InsertNum, Object);
-			}
-		}
-	}
-
-	// The input objects have been set, now change the input type
-	bool bBPStructureModified = false;
-	for (auto CurrentInput : Inputs)
-	{		
-		int32 NumGeo = CurrentInput->GetNumberOfInputObjects(EHoudiniInputType::Geometry);
-		int32 NumAsset = CurrentInput->GetNumberOfInputObjects(EHoudiniInputType::Asset);
-		int32 NumWorld = CurrentInput->GetNumberOfInputObjects(EHoudiniInputType::World);
-		int32 NumLandscape = CurrentInput->GetNumberOfInputObjects(EHoudiniInputType::Landscape);
-
-		EHoudiniInputType NewInputType = EHoudiniInputType::Invalid;
-		if (NumLandscape > 0 && NumLandscape >= NumGeo && NumLandscape >= NumAsset && NumLandscape >= NumWorld)
-			NewInputType = EHoudiniInputType::Landscape;
-		else if (NumWorld > 0 && NumWorld >= NumGeo && NumWorld >= NumAsset && NumWorld >= NumLandscape)
-			NewInputType = EHoudiniInputType::World;
-		else if (NumAsset > 0 && NumAsset >= NumGeo && NumAsset >= NumWorld && NumAsset >= NumLandscape)
-			NewInputType = EHoudiniInputType::Asset;
-		else if (NumGeo > 0 && NumGeo >= NumAsset && NumGeo >= NumWorld && NumGeo >= NumLandscape)
-			NewInputType = EHoudiniInputType::Geometry;
-
-		if (NewInputType == EHoudiniInputType::Invalid)
-			continue;
-
-		// Change the input type, unless if it was preset to a different type and we have object for the preset type
-		if (CurrentInput->GetInputType() == EHoudiniInputType::Geometry && NewInputType != EHoudiniInputType::Geometry)
-		{
-			CurrentInput->SetInputType(NewInputType, bBPStructureModified);
-		}
-		else
-		{
-			// Input type was preset, only change if that type is empty
-			if(CurrentInput->GetNumberOfInputObjects() <= 0)
-				CurrentInput->SetInputType(NewInputType, bBPStructureModified);
-		}
-	}
-	if (bBPStructureModified)
-	{
-		MarkAsBlueprintStructureModified();
-	}
-#endif
-
-	// Discard the tool presets after their first setup
-	InputPresets.Empty();
-}
-
 
 bool
 UHoudiniAssetComponent::IsComponentValid() const
@@ -3072,6 +2476,11 @@ UHoudiniAssetComponent::SetAssetState(EHoudiniAssetState InNewState)
 	const EHoudiniAssetState OldState = AssetState;
 	AssetState = InNewState;
 
+#if WITH_EDITOR
+	IHoudiniEditorAssetStateSubsystemInterface* const EditorSubsystem = IHoudiniEditorAssetStateSubsystemInterface::Get(); 
+	if (EditorSubsystem)
+		EditorSubsystem->NotifyOfHoudiniAssetStateChange(this, OldState, InNewState);
+#endif
 	HandleOnHoudiniAssetStateChange(this, OldState, InNewState);
 }
 
@@ -3090,6 +2499,16 @@ UHoudiniAssetComponent::HandleOnHoudiniAssetStateChange(UObject* InHoudiniAssetC
 	if (StateChangeDelegate.IsBound())
 		StateChangeDelegate.Broadcast(this, InFromState, InToState);
 
+	if (InToState == EHoudiniAssetState::PreInstantiation)
+	{
+		HandleOnPreInstantiation();
+	}
+	
+	if (InToState == EHoudiniAssetState::PreCook)
+	{
+		HandleOnPreCook();
+	}
+
 	if (InToState == EHoudiniAssetState::PostCook)
 	{
 		HandleOnPostCook();
@@ -3097,11 +2516,49 @@ UHoudiniAssetComponent::HandleOnHoudiniAssetStateChange(UObject* InHoudiniAssetC
 		
 }
 
+void UHoudiniAssetComponent::HandleOnPreInstantiation()
+{
+	if (OnPreInstantiationDelegate.IsBound())
+		OnPreInstantiationDelegate.Broadcast(this);
+}
+
+void
+UHoudiniAssetComponent::HandleOnPreCook()
+{
+	// Process the PreCookCallbacks array first
+	for(auto CallbackFn : PreCookCallbacks)
+	{
+		CallbackFn(this);
+	}
+	PreCookCallbacks.Empty();
+	
+	if (OnPreCookDelegate.IsBound())
+		OnPreCookDelegate.Broadcast(this);
+}
+
 void
 UHoudiniAssetComponent::HandleOnPostCook()
 {
 	if (OnPostCookDelegate.IsBound())
 		OnPostCookDelegate.Broadcast(this, bLastCookSuccess);
+}
+
+void
+UHoudiniAssetComponent::HandleOnPreOutputProcessing()
+{
+	if (OnPreOutputProcessingDelegate.IsBound())
+	{
+		OnPreOutputProcessingDelegate.Broadcast(this, true);
+	}
+}
+
+void
+UHoudiniAssetComponent::HandleOnPostOutputProcessing()
+{
+	if (OnPostOutputProcessingDelegate.IsBound())
+	{
+		OnPostOutputProcessingDelegate.Broadcast(this, true);
+	}
 }
 
 void

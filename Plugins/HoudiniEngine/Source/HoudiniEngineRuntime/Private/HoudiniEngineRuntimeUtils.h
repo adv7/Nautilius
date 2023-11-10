@@ -44,7 +44,6 @@
 class AActor;
 class UWorld;
 class ULandscapeSplinesComponent;
-class FUnrealObjectInputIdentifier;
 struct FHoudiniStaticMeshGenerationProperties;
 struct FMeshBuildSettings;
 
@@ -58,6 +57,9 @@ struct HOUDINIENGINERUNTIME_API FHoudiniEngineRuntimeUtils
 
 		// Return platform specific name of libHAPI.
 		static FString GetLibHAPIName();
+
+		// Check InCustomHoudiniLocationPath is a valid Houdini installation.
+		static bool CheckCustomHoudiniLocation(const FString& InCustomHoudiniLocationPath);
 
 		// Returns default SM Generation Properties using the default settings values
 		static FHoudiniStaticMeshGenerationProperties GetDefaultStaticMeshGenerationProperties();
@@ -359,29 +361,8 @@ struct HOUDINIENGINERUNTIME_API FHoudiniEngineRuntimeUtils
 
 
 		// -------------------------------------------------
-		// Experimental Features - Input system
+		// Landscape Splines
 		// -------------------------------------------------
-
-		// Returns true if the reference counted input system is enabled
-		static bool IsRefCountedInputSystemEnabled();
-
-		// Helper for checking if an input node is marked as dirty in the ref counted input system.
-		static bool IsInputNodeDirty(const FUnrealObjectInputIdentifier& InIdentifier);
-		// Helper for marking an input node, and optionally for reference nodes its referenced nodes, as dirty in the ref counted input system
-		static bool MarkInputNodeAsDirty(const FUnrealObjectInputIdentifier& InIdentifier, bool bInAlsoDirtyReferencedNodes);
-		// Helper for clearing the dirty flag an input node in the ref counted input system.
-		static bool ClearInputNodeDirtyFlag(const FUnrealObjectInputIdentifier& InIdentifier);
-
-
-		// -------------------------------------------------
-		// Experimental Features - Landscape Splines
-		// -------------------------------------------------
-
-		// Returns true if landscape spline input is enabled
-		static bool IsLandscapeSplineInputEnabled();
-
-		// Returns true if landscape spline output is enabled
-		static bool IsLandscapeSplineOutputEnabled();
 
 		// Gets the control points and/or segments of the given landscape spline
 		static bool GetLandscapeSplinesControlPointsAndSegments(
@@ -395,15 +376,6 @@ struct HOUDINIENGINERUNTIME_API FHoudiniEngineRuntimeUtils
 		// Gets the segments of a ULandscapeSplinesComponent
 		static bool GetLandscapeSplinesSegments(ULandscapeSplinesComponent* const InSplinesComponent, TArray<TObjectPtr<ULandscapeSplineSegment>>& OutSegments);
 
-
-		// -------------------------------------------------
-		// Experimental Features - Spline Meshes
-		// -------------------------------------------------
-
-		// Returns true if spline mesh input is enabled
-		static bool IsSplineMeshInputEnabled();
-
-	
 		// Helper function for destroying landscapes.
 
 		// -------------------------------------------------

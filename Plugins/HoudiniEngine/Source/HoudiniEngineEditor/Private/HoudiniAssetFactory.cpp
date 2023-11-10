@@ -28,7 +28,9 @@
 
 #include "HoudiniEngineEditorPrivatePCH.h"
 #include "HoudiniAsset.h"
-
+#include "HoudiniToolsPackageAsset.h"
+#include "HoudiniToolsEditor.h"
+#include "HoudiniEngineUtils.h"
 #include "EditorFramework/AssetImportData.h"
 #include "Misc/FileHelper.h"
 #include "Internationalization/Internationalization.h"
@@ -100,6 +102,13 @@ UHoudiniAssetFactory::FactoryCreateBinary(
 	FString SanitizedFileName = AssetImportData->GetSourceData().SourceFiles.Num() > 0 ? AssetImportData->GetSourceData().SourceFiles[0].RelativeFilename : UFactory::GetCurrentFilename();
 	HoudiniAsset->CreateAsset(Buffer, BufferEnd, SanitizedFileName);
 
+	// Import optional external data for the HoudiniAsset.
+
+	// We always import external JSON / Image data if it is available.
+	// The Reimport action has to determine whether it wants to preserve existing data, or use the new data. We won't
+	// be implementing that policy here.
+	FHoudiniToolsEditor::ImportExternalHoudiniAssetData(HoudiniAsset);
+
 	// Broadcast notification that the new asset has been imported.
 	GEditor->GetEditorSubsystem<UImportSubsystem>()->BroadcastAssetPostImport(this, HoudiniAsset);
 
@@ -113,7 +122,9 @@ UHoudiniAssetFactory::FactoryCreateFile(UClass* InClass, UObject* InParent, FNam
 	// but ".hda" files can be loaded normally
 	FString FileExtension = FPaths::GetExtension(Filename);
 	if (FileExtension.Compare(TEXT("hdalibrary"), ESearchCase::IgnoreCase) != 0)
+	{
 		return Super::FactoryCreateFile(InClass, InParent, InName, Flags, Filename, Parms, Warn, bOutOperationCanceled);
+	}
 
 	// Make sure the file name is sections.list
 	FString NameOfFile = FPaths::GetBaseFilename(Filename);
@@ -180,6 +191,7 @@ UHoudiniAssetFactory::SetReimportPaths(UObject * Obj, const TArray< FString > & 
 EReimportResult::Type
 UHoudiniAssetFactory::Reimport(UObject * Obj)
 {
+	
 	UHoudiniAsset * HoudiniAsset = Cast< UHoudiniAsset >(Obj);
 	if (HoudiniAsset && HoudiniAsset->AssetImportData)
 	{
@@ -189,12 +201,28 @@ UHoudiniAssetFactory::Reimport(UObject * Obj)
 		if (!Filename.Len() || IFileManager::Get().FileSize(*Filename) == INDEX_NONE)
 			return EReimportResult::Failed;
 
+		// TODO: Preserve existing ToolData after import, if ToolPackage->bImportToolDescription == true.
+		UHoudiniToolData* PrevToolData = HoudiniAsset->HoudiniToolData;
+
 		if (UFactory::StaticImportObject(
 			HoudiniAsset->GetClass(), HoudiniAsset->GetOuter(), *HoudiniAsset->GetName(),
 			RF_Public | RF_Standalone, *Filename, NULL, this))
 		{
-			HOUDINI_LOG_MESSAGE(TEXT("Houdini Asset reimported successfully."));
+			UHoudiniToolsPackageAsset* ToolPackage = FHoudiniToolsEditor::FindOwningToolsPackage(HoudiniAsset);
 
+			if (IsValid(ToolPackage) && !ToolPackage->bReimportToolsDescription && IsValid(PrevToolData))
+			{
+				// We need to preserve the old data.
+				UHoudiniToolData* NewToolData = FHoudiniToolsEditor::GetOrCreateHoudiniToolData(HoudiniAsset);
+				NewToolData->CopyFrom(*PrevToolData);
+
+				NewToolData->UpdateOwningAssetThumbnail();
+				
+				HOUDINI_LOG_WARNING(TEXT("Reimported HoudiniAsset (%s) but ignored external data due to package settings."), *HoudiniAsset->GetName());
+				const FString Msg = FString::Format(TEXT("Reimported HoudiniAsset ({0}) but ignored external data (JSON/Icon) due to package settings."), { HoudiniAsset->GetName() });
+				FHoudiniEngineUtils::CreateSlateNotification(Msg);
+			}
+			
 			if (HoudiniAsset->GetOuter())
 				HoudiniAsset->GetOuter()->MarkPackageDirty();
 			else

@@ -27,6 +27,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "HoudiniPreset.h"
 
 class FString;
 class UObject;
@@ -73,10 +74,20 @@ public:
 	// Instantiate a HoudiniAsset at a given position. If InSpawnInLevelOverride is non-null, spawns in that level.
 	// Otherwise if InSpawnInWorld, spawns in the current level of InSpawnInWorld. Lastly, if both are null, spawns
 	// in the current level of the editor context world.
-	static AActor* InstantiateHoudiniAssetAt(UHoudiniAsset* InHoudiniAsset, const FTransform& InTransform, UWorld* InSpawnInWorld=nullptr, ULevel* InSpawnInLevelOverride=nullptr);
+	static AActor* InstantiateHoudiniAssetAt(
+		UHoudiniAsset* InHoudiniAsset,
+		const FTransform& InTransform,
+		UWorld* InSpawnInWorld=nullptr,
+		ULevel* InSpawnInLevelOverride=nullptr,
+		UHoudiniPreset* InPreset=nullptr
+		);
 
 	// Instantiate the given HDA, and handles the current CB/World selection
-	static void InstantiateHoudiniAsset(UHoudiniAsset* InHoudiniAsset, const EHoudiniToolType& InType, const EHoudiniToolSelectionType& InSelectionType);
+	static void InstantiateHoudiniAsset(
+		UHoudiniAsset* InHoudiniAsset,
+		const EHoudiniToolType& InType,
+		const EHoudiniToolSelectionType& InSelectionType,
+		UHoudiniPreset* InPreset=nullptr);
 
 	// Helper function used to save all temporary packages when the level is saved
 	static void SaveAllHoudiniTemporaryCookData(UWorld *InSaveWorld);
@@ -99,4 +110,7 @@ public:
 	// Call PostEditChangeChainProperty on InRootObject for the property at InPropertyPath relative to
 	// InRootObject.
 	static void NotifyPostEditChangeProperty(FName InPropertyPath, UObject* InRootObject);
+
+	// Get a ProjectSavedDir()/HoudiniEngine directory for saving editor state
+	static FString HoudiniEngineSavedDir();
 };

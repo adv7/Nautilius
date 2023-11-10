@@ -40,7 +40,7 @@ UENUM()
 enum EHoudiniRuntimeSettingsSessionType
 {
 	// In process session.
-	HRSST_InProcess UMETA(Hidden),
+	HRSST_InProcess UMETA(Hidden, DisplayName = "In Process (experimental)"),
 
 	// TCP socket connection to Houdini Engine server.
 	HRSST_Socket UMETA(DisplayName = "TCP socket"),
@@ -193,6 +193,7 @@ protected:
 		UPROPERTY(GlobalConfig, EditAnywhere, Category = Session)
 		bool bStartAutomaticServer;
 
+		// The timeout (in ms) to be used when attempting to create a Houdini Engine Session
 		UPROPERTY(GlobalConfig, EditAnywhere, Category = Session)
 		float AutomaticServerTimeout;
 
@@ -475,26 +476,26 @@ protected:
 		UPROPERTY(GlobalConfig, EditAnywhere, Category = "PDG Settings", Meta = (DisplayName = "Async Importer Enabled"))
 		bool bPDGAsyncCommandletImportEnabled;
 
-		//-------------------------------------------------------------------------------------------------------------
-		// Legacy
-		//-------------------------------------------------------------------------------------------------------------
-		// Whether to enable backward compatibility
-		UPROPERTY(GlobalConfig, EditAnywhere, Category = "Legacy", Meta = (DisplayName = "Enable backward compatibility with Version 1"))
-		bool bEnableBackwardCompatibility;
 
-		// Automatically rebuild legacy HAC
-		UPROPERTY(GlobalConfig, EditAnywhere, Category = "Legacy", meta = (DisplayName = "Automatically rebuild legacy Houdini Asset Components", EditCondition = "bEnableBackwardCompatibility"))
-		bool bAutomaticLegacyHDARebuild;
+		//-------------------------------------------------------------------------------------------------------------
+		// Houdini Tools Paths
+		//-------------------------------------------------------------------------------------------------------------
+
+		// Project-specific search paths should be search for HoudiniTools packages, inside of Unreal.
+		// Each subdirectory will be considered for a HoudiniTools package.
+		UPROPERTY(GlobalConfig, EditAnywhere, Category = HoudiniTools)
+		TArray<FString> HoudiniToolsSearchPath;
 
 		//-------------------------------------------------------------------------------------------------------------
 		// Custom Houdini Location
 		//-------------------------------------------------------------------------------------------------------------
+
 		// Whether to use custom Houdini location.
-		UPROPERTY(GlobalConfig, EditAnywhere, Category = HoudiniLocation, Meta = (DisplayName = "Use custom Houdini location (requires restart)"))
+		UPROPERTY(GlobalConfig, EditAnywhere, Category = HoudiniLocation, Meta = (DisplayName = "Use custom Houdini location (requires restart)", ConfigRestartRequired=true))
 		bool bUseCustomHoudiniLocation;
 
 		// Custom Houdini location (where HAPI library is located).
-		UPROPERTY(GlobalConfig, EditAnywhere, Category = HoudiniLocation, Meta = (DisplayName = "Custom Houdini location"))
+		UPROPERTY(GlobalConfig, EditAnywhere, Category = HoudiniLocation, Meta = (EditCondition = "bUseCustomHoudiniLocation", DisplayName = "Custom Houdini location", ConfigRestartRequired=true))
 		FDirectoryPath CustomHoudiniLocation;
 
 		// Select the Houdini executable to be used when opening session sync or opening hip files

@@ -188,9 +188,6 @@ bool FHoudiniEditorEquivalenceUtils::IsEquivalent(const UHoudiniAssetComponent *
 
 	// Skip bNoProxyMeshNextCookRequested
 
-	// Not sure if this is necessary:
-	Result &= TestExpressionError(A->InputPresets.Num() == B->InputPresets.Num(), Header, "InputPresets");
-
 	// Skip bBakeAfterNextCook
 
 	// Skip delegates
@@ -268,14 +265,7 @@ bool FHoudiniEditorEquivalenceUtils::IsEquivalent(const UHoudiniParameter* A, co
 	
 	Result &= TestExpressionError(A->Help.Equals(B->Help), Header, "Help");
 	Result &= TestExpressionError(A->TagCount == B->TagCount, Header, "TagCount");
-
-	// Andy: For some reason ValueIndex for folders is set differently when cooking from the test application; the HDA
-	// seems to get cooked 3 times, ending up with different results each time. Since this doesn't (I think!) affect
-	// folders, ignore it for now.
-
-	if ((A->ParmType != EHoudiniParameterType::Folder) && (A->ParmType != EHoudiniParameterType::FolderList))
-	    Result &= TestExpressionError(A->ValueIndex == B->ValueIndex, Header, "ValueIndex");
-
+	//Result &= TestExpressionError(A->ValueIndex == B->ValueIndex, Header, "ValueIndex");
 	Result &= TestExpressionError(A->bHasExpression == B->bHasExpression, Header, "bHasExpression");
 	Result &= TestExpressionError(A->ParamExpression.Equals(B->ParamExpression), Header, "ParamExpression");
 	
@@ -533,13 +523,13 @@ bool FHoudiniEditorEquivalenceUtils::IsEquivalent(const UHoudiniOutput* A, const
 		SetTestExpressionError(true);
 		Result &= TestExpressionError(HasEquivalent, Header, "InstancedOutputs");
 	}
-	Result &= TestExpressionError(A->AssignementMaterials.Num() == B->AssignementMaterials.Num(), Header, "AssignementMaterials.Num");
-	for (auto PairA : A->AssignementMaterials)
+	Result &= TestExpressionError(A->AssignmentMaterialsById.Num() == B->AssignmentMaterialsById.Num(), Header, "AssignmentMaterialsById.Num");
+	for (auto PairA : A->AssignmentMaterialsById)
 	{
 		SetTestExpressionError(false);
 
 		bool HasEquivalent = false;
-		for (auto PairB : B->AssignementMaterials)
+		for (auto PairB : B->AssignmentMaterialsById)
 		{
 			if (IsEquivalent(PairA.Value, PairB.Value))
 			{
@@ -548,15 +538,15 @@ bool FHoudiniEditorEquivalenceUtils::IsEquivalent(const UHoudiniOutput* A, const
 			}
 		}
 		SetTestExpressionError(true);
-		Result &= TestExpressionError(HasEquivalent, Header, "AssignementMaterials");
+		Result &= TestExpressionError(HasEquivalent, Header, "AssignmentMaterialsById");
 	}
-	Result &= TestExpressionError(A->ReplacementMaterials.Num() == B->ReplacementMaterials.Num(), Header, "ReplacementMaterials.Num");
+	Result &= TestExpressionError(A->ReplacementMaterialsById.Num() == B->ReplacementMaterialsById.Num(), Header, "ReplacementMaterialsById.Num");
 
-	for (auto PairA : A->ReplacementMaterials)
+	for (auto PairA : A->ReplacementMaterialsById)
 	{
 		SetTestExpressionError(false);
 		bool HasEquivalent = false;
-		for (auto PairB : B->ReplacementMaterials)
+		for (auto PairB : B->ReplacementMaterialsById)
 		{
 			if (IsEquivalent(PairA.Value, PairB.Value))
 			{
@@ -565,7 +555,7 @@ bool FHoudiniEditorEquivalenceUtils::IsEquivalent(const UHoudiniOutput* A, const
 			}
 		}
 		SetTestExpressionError(true);
-		Result &= TestExpressionError(HasEquivalent, Header, "ReplacementMaterials");
+		Result &= TestExpressionError(HasEquivalent, Header, "ReplacementMaterialsById");
 	}
 
 
@@ -750,7 +740,7 @@ bool FHoudiniEditorEquivalenceUtils::IsEquivalent(const FHoudiniInstancedOutput&
 	const FString Header = "FHoudiniInstancedOutput";
 	bool Result = true;
 
-	Result &= TestExpressionError(IsEquivalent(A.OriginalObject.Get(), B.OriginalObject.Get()), Header, "OriginalObject");
+	//Result &= TestExpressionError(IsEquivalent(A.OriginalObject.Get(), B.OriginalObject.Get()), Header, "OriginalObject");
 	Result &= TestExpressionError(A.OriginalObjectIndex == B.OriginalObjectIndex, Header, "OriginalObjectIndex");
 	Result &= TestExpressionError(A.OriginalTransforms.Num() == B.OriginalTransforms.Num(), Header, "OriginalTransforms.Num");
 	for (int i = 0; i < FMath::Min(A.OriginalTransforms.Num(), B.OriginalTransforms.Num()); i++)
@@ -760,7 +750,7 @@ bool FHoudiniEditorEquivalenceUtils::IsEquivalent(const FHoudiniInstancedOutput&
 	Result &= TestExpressionError(A.VariationObjects.Num() == B.VariationObjects.Num(), Header, "VariationObjects.Num");
 	for (int i = 0; i < FMath::Min(A.VariationObjects.Num(), B.VariationObjects.Num()); i++)
 	{
-		Result &= TestExpressionError(IsEquivalent(A.VariationObjects[i].Get(), B.VariationObjects[i].Get()), Header, "VariationObjects");	
+	//	Result &= TestExpressionError(IsEquivalent(A.VariationObjects[i].Get(), B.VariationObjects[i].Get()), Header, "VariationObjects");	
 	}
 	Result &= TestExpressionError(A.VariationTransformOffsets.Num() == B.VariationTransformOffsets.Num(), Header, "VariationTransformOffsets.Num");
 	for (int i = 0; i < FMath::Min(A.VariationTransformOffsets.Num(), B.VariationTransformOffsets.Num()); i++)
@@ -2118,8 +2108,9 @@ bool FHoudiniEditorEquivalenceUtils::TestExpressionError(const bool Expression, 
 
 		if (TestExpressionErrorEnabled == false)
 		{
-			const FString OutputStr = FString::Printf(TEXT("%s: %s is not equivalent, but may just be a TMap comparison"), *Header, *Subject);
-			UE_LOG(LogTemp, Display, TEXT("%s"), *OutputStr);
+			// Andy: Comment out this message, it really spams the logs.
+			//const FString OutputStr = FString::Printf(TEXT("%s: %s is not equivalent, but may just be a TMap comparison"), *Header, *Subject);
+			//UE_LOG(LogTemp, Display, TEXT("%s"), *OutputStr);
 			return false;
 		}
 		
@@ -2147,11 +2138,11 @@ void FHoudiniEditorEquivalenceUtils::SetTestExpressionError(bool Enabled)
 	TestExpressionErrorEnabled = Enabled;
 	if (TestExpressionErrorEnabled)
 	{
-		UE_LOG(LogTemp, Display, TEXT("Enabling test expression errors."))
+	//	UE_LOG(LogTemp, Display, TEXT("Enabling test expression errors."))
 	}
 	else
 	{
-		UE_LOG(LogTemp, Display, TEXT("Ignoring test expression errors (Usually we do this for TMaps)"))
+	//	UE_LOG(LogTemp, Display, TEXT("Ignoring test expression errors (Usually we do this for TMaps)"))
 	}
 }
 

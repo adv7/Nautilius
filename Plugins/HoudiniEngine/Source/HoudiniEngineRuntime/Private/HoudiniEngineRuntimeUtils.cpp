@@ -28,8 +28,6 @@
 
 #include "HoudiniEngineRuntimePrivatePCH.h"
 #include "HoudiniRuntimeSettings.h"
-#include "UnrealObjectInputRuntimeTypes.h"
-#include "UnrealObjectInputManager.h"
 
 #include "EngineUtils.h"
 #include "Engine/EngineTypes.h"
@@ -43,7 +41,7 @@
 
 #if WITH_EDITOR
 	#include "Editor.h"
-	#include "Kismet2/BlueprintEditorUtils.h"
+	#include "Kismet2/BlueprintEditorUtils.h"	
 	#include "SSubobjectBlueprintEditor.h"
 #if ENGINE_MAJOR_VERSION < 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 0)
 	#include "LandscapeSplineControlPoint.h"
@@ -66,6 +64,29 @@ FHoudiniEngineRuntimeUtils::GetLibHAPIName()
 #endif
 
 	return LibHAPIName;
+}
+
+
+bool
+FHoudiniEngineRuntimeUtils::CheckCustomHoudiniLocation(const FString& InCustomHoudiniLocationPath)
+{
+	const FString LibHAPIName = GetLibHAPIName();
+	const FString LibHAPICustomPath = FString::Printf(TEXT("%s/%s"), *InCustomHoudiniLocationPath, *LibHAPIName);
+
+	// If path does not point to libHAPI location, we need to let user know.
+	if (!FPaths::FileExists(LibHAPICustomPath))
+	{
+		const FString MessageString = FString::Printf(
+			TEXT("%s was not found in %s"), *LibHAPIName, *InCustomHoudiniLocationPath);
+
+		FPlatformMisc::MessageBoxExt(
+			EAppMsgType::Ok, *MessageString,
+			TEXT("Invalid Custom Location Specified, resetting."));
+
+		return false;
+	}
+
+	return true;
 }
 
 
@@ -742,70 +763,6 @@ FHoudiniEngineRuntimeUtils::GetDefaultMeshBuildSettings()
 	}
 
 	return DefaultBuildSettings;
-}
-
-bool
-FHoudiniEngineRuntimeUtils::IsRefCountedInputSystemEnabled()
-{
-	UHoudiniRuntimeSettings const* const Settings = GetDefault<UHoudiniRuntimeSettings>();
-	return IsValid(Settings) && Settings->bEnableTheReferenceCountedInputSystem;
-}
-
-bool
-FHoudiniEngineRuntimeUtils::IsLandscapeSplineInputEnabled()
-{
-	return false;
-}
-
-bool
-FHoudiniEngineRuntimeUtils::IsLandscapeSplineOutputEnabled()
-{
-	return false;
-}
-
-bool
-FHoudiniEngineRuntimeUtils::IsSplineMeshInputEnabled()
-{
-	return false;
-}
-
-bool
-FHoudiniEngineRuntimeUtils::IsInputNodeDirty(const FUnrealObjectInputIdentifier& InIdentifier)
-{
-	if (!InIdentifier.IsValid())
-		return false;
-
-	FUnrealObjectInputManager const* const Manager = FUnrealObjectInputManager::Get();
-	if (!Manager)
-		return false;
-
-	return Manager->IsDirty(InIdentifier);
-}
-
-bool
-FHoudiniEngineRuntimeUtils::MarkInputNodeAsDirty(const FUnrealObjectInputIdentifier& InIdentifier, const bool bInAlsoDirtyReferencedNodes)
-{
-	if (!InIdentifier.IsValid())
-		return false;
-
-	FUnrealObjectInputManager* const Manager = FUnrealObjectInputManager::Get();
-	if (!Manager)
-		return false;
-
-	return Manager->MarkAsDirty(InIdentifier, bInAlsoDirtyReferencedNodes);
-}
-
-bool
-FHoudiniEngineRuntimeUtils::ClearInputNodeDirtyFlag(const FUnrealObjectInputIdentifier& InIdentifier)
-{
-	if (!InIdentifier.IsValid())
-		return false;
-
-	FUnrealObjectInputManager* const Manager = FUnrealObjectInputManager::Get();
-	if (!Manager)
-		return false;
-
-	return Manager->ClearDirtyFlag(InIdentifier);
 }
 
 bool

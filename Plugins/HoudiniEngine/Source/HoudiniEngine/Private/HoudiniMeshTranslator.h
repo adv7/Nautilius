@@ -31,18 +31,15 @@
 #include "HoudiniOutput.h"
 #include "HoudiniPackageParams.h"
 #include "HoudiniAssetComponent.h"
+#include "HoudiniMaterialTranslator.h"
 
 #include "CoreMinimal.h"
 #include "UObject/ObjectMacros.h"
-#include "ImportUtils/SkeletalMeshImportUtils.h"
-#include "Rendering/SkeletalMeshLODImporterData.h"
 #include "PhysicsEngine/AggregateGeom.h"
 
 //#include "HoudiniMeshTranslator.generated.h"
 
 class UStaticMesh;
-class USkeletalMesh;
-class USkeleton;
 class UStaticMeshSocket;
 class UMaterialInterface;
 class UMeshComponent;
@@ -52,23 +49,6 @@ class UHoudiniStaticMeshComponent;
 
 struct FKAggregateGeom;
 struct FHoudiniGenericAttribute;
-
-
-struct SKBuildSettings
-{
-    FSkeletalMeshImportData SkeletalMeshImportData;
-    bool bIsNewSkeleton = false;
-    float ImportScale = 1.0f;
-	USkeletalMesh* SKMesh = nullptr;
-	UPackage* SKPackage = nullptr;
-    USkeleton* Skeleton = nullptr;
-    FString CurrentObjectName;
-    HAPI_NodeId GeoId = -1;
-    HAPI_NodeId PartId = -1;
-	bool ImportNormals = false;
-	bool OverwriteSkeleton = false;
-	FString SkeletonAssetPath = "";
-};
 
 UENUM()
 enum class EHoudiniSplitType : uint8
@@ -104,7 +84,7 @@ struct HOUDINIENGINE_API FHoudiniMeshTranslator
 			const EHoudiniStaticMeshMethod& InStaticMeshMethod,
 			const FHoudiniStaticMeshGenerationProperties& InSMGenerationProperties,
 			const FMeshBuildSettings& InMeshBuildSettings,
-			const TMap<FString, UMaterialInterface*>& InAllOutputMaterials,
+			const TMap<FHoudiniMaterialIdentifier, UMaterialInterface*>& InAllOutputMaterials,
 			UObject* InOuterComponent,
 			bool bInTreatExistingMaterialsAsUpToDate=false,
 			bool bInDestroyProxies=false);
@@ -114,9 +94,9 @@ struct HOUDINIENGINE_API FHoudiniMeshTranslator
 			const FHoudiniPackageParams& InPackageParams,
 			const TMap<FHoudiniOutputObjectIdentifier, FHoudiniOutputObject>& InOutputObjects,
 			TMap<FHoudiniOutputObjectIdentifier, FHoudiniOutputObject>& OutOutputObjects,
-			TMap<FString, UMaterialInterface*>& InAssignmentMaterialMap,
-			TMap<FString, UMaterialInterface*>& InReplacementMaterialMap,
-			const TMap<FString, UMaterialInterface*>& InAllOutputMaterials,
+			TMap<FHoudiniMaterialIdentifier, UMaterialInterface*>& InAssignmentMaterialMap,
+			TMap<FHoudiniMaterialIdentifier, UMaterialInterface*>& InReplacementMaterialMap,
+			const TMap<FHoudiniMaterialIdentifier, UMaterialInterface*>& InAllOutputMaterials,
 			UObject* const InOuterComponent,
 			const bool& InForceRebuild,
 			const EHoudiniStaticMeshMethod& InStaticMeshMethod,
@@ -130,14 +110,6 @@ struct HOUDINIENGINE_API FHoudiniMeshTranslator
 			TMap<FHoudiniOutputObjectIdentifier, FHoudiniOutputObject>& InNewOutputObjects,
 			bool bInDestroyProxies=false,
 			bool bInApplyGenericProperties=true);
-
-		static void ExportSkeletalMeshAssets(UHoudiniOutput* InOutput);
-		static bool HasSkeletalMeshData(const HAPI_NodeId& GeoId, const HAPI_NodeId& PartId);
-		static void LoadImportData(const HAPI_NodeId& GeoId, const HAPI_NodeId& PartId);
-		static void CreateSKAssetAndPackage(SKBuildSettings& BuildSettings, const HAPI_NodeId& GeoId, const HAPI_NodeId& PartId, FString PackageName, int MaxInfluences = 1, bool ImportNormals = false);
-		static void BuildSKFromImportData(SKBuildSettings& BuildSettings, TArray<FSkeletalMaterial>& Materials);
-		static void SKImportData(SKBuildSettings& BuildSettings);
-		static USkeleton* CreateOrUpdateSkeleton(SKBuildSettings& BuildSettings);
 
 		//-----------------------------------------------------------------------------------------------------------------------------
 		// HELPERS
@@ -222,9 +194,9 @@ struct HOUDINIENGINE_API FHoudiniMeshTranslator
 		void SetInputObjects(const TMap<FHoudiniOutputObjectIdentifier, FHoudiniOutputObject>& InInputObjects) { InputObjects = InInputObjects; };
 		void SetOutputObjects(TMap<FHoudiniOutputObjectIdentifier, FHoudiniOutputObject>& InOutputObjects) { OutputObjects = InOutputObjects; };
 
-		void SetInputAssignmentMaterials(const TMap<FString, UMaterialInterface*>& InInputMaterials) { InputAssignmentMaterials = InInputMaterials; };
-		void SetReplacementMaterials(const TMap<FString, UMaterialInterface*>& InReplacementMaterials) { ReplacementMaterials = InReplacementMaterials; };
-		void SetAllOutputMaterials(const TMap<FString, UMaterialInterface*>& InAllOutputMaterials) { AllOutputMaterials = InAllOutputMaterials; };
+		void SetInputAssignmentMaterials(const TMap<FHoudiniMaterialIdentifier, UMaterialInterface*>& InInputMaterials) { InputAssignmentMaterials = InInputMaterials; };
+		void SetReplacementMaterials(const TMap<FHoudiniMaterialIdentifier, UMaterialInterface*>& InReplacementMaterials) { ReplacementMaterials = InReplacementMaterials; };
+		void SetAllOutputMaterials(const TMap<FHoudiniMaterialIdentifier, UMaterialInterface*>& InAllOutputMaterials) { AllOutputMaterials = InAllOutputMaterials; };
 
 		//void SetInputObjectProperties(const TMap<FHoudiniOutputObjectIdentifier, FHoudiniOutputObjectProperty>& InInputObjectProperties) { InputObjectProperties = InInputObjectProperties; };
 		//void SetOutputObjectProperties(TMap<FHoudiniOutputObjectIdentifier, FHoudiniOutputObjectProperty>& InOutputObjectProperties) { OutputObjectProperties = InOutputObjectProperties; };
@@ -241,14 +213,12 @@ struct HOUDINIENGINE_API FHoudiniMeshTranslator
 		// Legacy function using RawMesh for static Mesh creation
 		bool CreateStaticMesh_RawMesh();
 
-		bool CreateSkeletalMesh_SkeletalMeshImportData();
-
 		// Indicates the update is forced
 		bool ForceRebuild;
 		int32 DefaultMeshSmoothing;
 
 	protected:
-\
+
 		// Create a UHoudiniStaticMesh
 		bool CreateHoudiniStaticMesh();
 
@@ -315,9 +285,6 @@ struct HOUDINIENGINE_API FHoudiniMeshTranslator
 			int32 MatIndex,
 			TArray<FStaticMaterial>& FoundStaticMaterials);
 
-		USkeletalMesh* CreateNewSkeletalMesh(const FString& InSplitIdentifier);
-		USkeleton* CreateNewSkeleton(const FString& InSplitIdentifier);
-
 		UStaticMesh* CreateNewStaticMesh(const FString& InMeshIdentifierString);
 
 		UStaticMesh* FindExistingStaticMesh(const FHoudiniOutputObjectIdentifier& InIdentifier);
@@ -377,8 +344,8 @@ struct HOUDINIENGINE_API FHoudiniMeshTranslator
 		static bool AddActorsToMeshSocket(UStaticMeshSocket * Socket, UStaticMeshComponent * StaticMeshComponent, 
 			TArray<AActor*>& HoudiniCreatedSocketActors, TArray<AActor*>& HoudiniAttachedSocketActors);
 
-
 		static bool HasFracturePieceAttribute(const HAPI_NodeId& GeoId, const HAPI_NodeId& PartId);
+
 	protected:
 
 		// Data cache for this translator
@@ -401,14 +368,14 @@ struct HOUDINIENGINE_API FHoudiniMeshTranslator
 
 
 		// Input Material Map
-		TMap<FString, UMaterialInterface*> InputAssignmentMaterials;
+		TMap<FHoudiniMaterialIdentifier, UMaterialInterface*> InputAssignmentMaterials;
 		// Output Material Map
-		TMap<FString, UMaterialInterface*> OutputAssignmentMaterials;
+		TMap<FHoudiniMaterialIdentifier, UMaterialInterface*> OutputAssignmentMaterials;
 		// Input Replacement Materials maps
-		TMap<FString, UMaterialInterface*> ReplacementMaterials;
+		TMap<FHoudiniMaterialIdentifier, UMaterialInterface*> ReplacementMaterials;
 		// All the materials that have been generated by this Houdini Asset
 		// Used to avoid generating the same houdini material over and over again
-		TMap<FString, UMaterialInterface*> AllOutputMaterials;
+		TMap<FHoudiniMaterialIdentifier, UMaterialInterface*> AllOutputMaterials;
 
 		// Input mesh properties
 		//TMap<FHoudiniOutputObjectIdentifier, FHoudiniOutputObjectProperty> InputObjectProperties;
@@ -488,15 +455,17 @@ struct HOUDINIENGINE_API FHoudiniMeshTranslator
 		bool bOnlyOneFaceMaterial;
 
 		// Material Overrides per face
-		TArray<FString> PartFaceMaterialOverrides;
-		HAPI_AttributeInfo AttribInfoFaceMaterialOverrides;
+		TArray<FHoudiniMaterialInfo> PartFaceMaterialOverrides;
+		// Indicates whether we have any valid material overrides via attributes
+		bool bHaveMaterialOverrides;
+		// Indicates if we have prim material attributes
+		bool bHavePrimMaterialOverrides;
 		// Indicates that material overides attributes need an instance to be created
 		bool bMaterialOverrideNeedsCreateInstance;
 
 		// LOD Screensize
 		TArray<float> PartLODScreensize;
 		HAPI_AttributeInfo AttribInfoLODScreensize;
-
 
 		// When building a mesh, if an associated material already exists, treat
 		// it as up to date, regardless of the MaterialInfo.bHasChanged flag

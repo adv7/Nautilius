@@ -647,6 +647,7 @@ FHoudiniEngineManager::ProcessComponent(UHoudiniAssetComponent* HAC)
 			// Handle PostCook
 			EHoudiniAssetState NewState = EHoudiniAssetState::None;
 			bool bSuccess = HAC->bLastCookSuccess;
+			HAC->HandleOnPreOutputProcessing();
 			HAC->OnPreOutputProcessing();
 			if (PostCook(HAC, bSuccess, HAC->GetAssetId()))
 			{
@@ -675,6 +676,7 @@ FHoudiniEngineManager::ProcessComponent(UHoudiniAssetComponent* HAC)
 			int32 CookCount = FHoudiniEngineUtils::HapiGetCookCount(HAC->GetAssetId());
 			HAC->SetAssetCookCount(CookCount);
 
+			HAC->HandleOnPostOutputProcessing();
 			HAC->OnPostOutputProcessing();
 			FHoudiniEngineUtils::UpdateBlueprintEditor(HAC);
 			break;
@@ -1258,14 +1260,6 @@ FHoudiniEngineManager::PostCook(UHoudiniAssetComponent* HAC, const bool& bSucces
 
 		if (bHasHoudiniStaticMeshOutput)
 			bNeedsToTriggerViewportUpdate = true;
-
-		UHoudiniAssetComponent::FOnPostCookBakeDelegate& OnPostCookBakeDelegate = HAC->GetOnPostCookBakeDelegate();
-		if (OnPostCookBakeDelegate.IsBound())
-		{
-			OnPostCookBakeDelegate.Execute(HAC);
-			if (!HAC->IsBakeAfterNextCookEnabled())
-				OnPostCookBakeDelegate.Unbind();
-		}
 	}
 	else
 	{
@@ -1273,20 +1267,6 @@ FHoudiniEngineManager::PostCook(UHoudiniAssetComponent* HAC, const bool& bSucces
 		//CreateParameters();
 		//CreateInputs();
 		//CreateHandles();
-
-		// Clear the bake after cook delegate if 
-		UHoudiniAssetComponent::FOnPostCookBakeDelegate& OnPostCookBakeDelegate = HAC->GetOnPostCookBakeDelegate();
-		if (OnPostCookBakeDelegate.IsBound() && !HAC->IsBakeAfterNextCookEnabled())
-		{
-			OnPostCookBakeDelegate.Unbind();
-			// Notify the user that the bake failed since the cook failed.
-			FHoudiniEngine::Get().UpdateCookingNotification(FText::FromString("Cook failed, therefore the bake also failed..."), true);
-		}
-	}
-
-	if (HAC->InputPresets.Num() > 0)
-	{
-		HAC->ApplyInputPresets();
 	}
 
 	// Cache the current cook counts of the nodes so that we can more reliable determine

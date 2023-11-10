@@ -30,6 +30,7 @@
 #include "HoudiniAsset.generated.h"
 
 class UAssetImportData;
+class UHoudiniToolData;
 
 UCLASS(BlueprintType, EditInlineNew, config = Engine)
 class HOUDINIENGINERUNTIME_API UHoudiniAsset : public UObject
@@ -66,6 +67,12 @@ class HOUDINIENGINERUNTIME_API UHoudiniAsset : public UObject
 		// Return true if this asset is an expanded HDA (HDA dir)
 		bool IsExpandedHDA() const;
 
+#if WITH_EDITOR
+		virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
+	
+		virtual void PostSaveRoot(FObjectPostSaveRootContext ObjectSaveContext) override; 
+
 	private:
 		// Used to load old (version1) versions of HoudiniAssets
 		void SerializeLegacy(FArchive & Ar);
@@ -80,6 +87,10 @@ class HOUDINIENGINERUNTIME_API UHoudiniAsset : public UObject
 		// Importing data and options used for this Houdini asset.
 		UPROPERTY(Category = ImportSettings, VisibleAnywhere, Instanced)
 		UAssetImportData * AssetImportData;
+
+		// HoudiniTool related data stored on the Houdini asset.
+		UPROPERTY(Category = HoudiniTools, VisibleAnywhere, Instanced)
+		UHoudiniToolData* HoudiniToolData;
 #endif
 
 	private:

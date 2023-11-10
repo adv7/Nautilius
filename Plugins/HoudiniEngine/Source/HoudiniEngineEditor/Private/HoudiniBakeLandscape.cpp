@@ -25,7 +25,6 @@
 */
 
 #include "HoudiniEngineEditorPrivatePCH.h"
-#include "HoudiniEngineRuntimeUtils.h"
 #include "HoudiniEngineUtils.h"
 #include "HoudiniAsset.h"
 #include "HoudiniOutput.h"
@@ -524,15 +523,15 @@ void FHoudiniLandscapeBake::BakeMaterials(
 	{
 		ULandscapeInfo* Info = Layer.Landscape->GetLandscapeInfo();
 
-#if ENGINE_MINOR_VERSION < 1
-		TArray<ALandscapeStreamingProxy*> & Proxies = Info->Proxies;
-		for (ALandscapeStreamingProxy* Proxy : Proxies)
-		{
-#else
-		TArray<TWeakObjectPtr<ALandscapeStreamingProxy>> & Proxies = Info->StreamingProxies;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+		TArray<TWeakObjectPtr<ALandscapeStreamingProxy>>& Proxies = Info->StreamingProxies;
 		for (auto ProxyPtr : Proxies)
 		{
 			ALandscapeStreamingProxy* Proxy = ProxyPtr.Get();
+#else
+		TArray<ALandscapeStreamingProxy*>& Proxies = Info->Proxies;
+		for (ALandscapeStreamingProxy* Proxy : Proxies)
+		{
 #endif	
 			if (!IsValid(Proxy))
 				continue;
@@ -683,9 +682,6 @@ bool FHoudiniLandscapeBake::BakeLandscapeSplines(
 	TMap<ALandscape*, FHoudiniClearedEditLayers>& ClearedLandscapeEditLayers,
 	TArray<UPackage*>& OutPackagesToSave)
 {
-	if (!FHoudiniEngineRuntimeUtils::IsLandscapeSplineOutputEnabled())
-		return false;
-
 	// Check that index is not negative
 	if (InOutputIndex < 0)
 		return false;

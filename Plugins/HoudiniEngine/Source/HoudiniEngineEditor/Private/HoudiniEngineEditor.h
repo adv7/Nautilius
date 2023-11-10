@@ -28,6 +28,7 @@
 
 #include "IHoudiniEngineEditor.h"
 #include "HoudiniInputTypes.h"
+#include "HoudiniEngineToolTypes.h"
 
 #include "CoreTypes.h"
 #include "Templates/SharedPointer.h"
@@ -44,6 +45,7 @@ class FMenuBuilder;
 class FMenuBarBuilder;
 class FUICommandList;
 class AActor;
+class FHoudiniToolsEditor;
 
 struct IConsoleCommand;
 struct FSlateDynamicImageBrush;
@@ -85,6 +87,9 @@ class HOUDINIENGINEEDITOR_API FHoudiniEngineEditor : public IHoudiniEngineEditor
 		virtual void RegisterEditorTabs() override;
 		virtual void UnRegisterEditorTabs() override;
 
+		void RegisterLevelEditorTabs(TSharedPtr<FTabManager> LevelTabManager);
+		void RegisterLevelEditorLayoutExtensions(FLayoutExtender& Extender);
+	
 		// Return singleton instance of Houdini Engine Editor, used internally.
 		static FHoudiniEngineEditor & Get();
 
@@ -198,6 +203,8 @@ class HOUDINIENGINEEDITOR_API FHoudiniEngineEditor : public IHoudiniEngineEditor
 
 		//void ModulesChangedCallback(FName ModuleName, EModuleChangeReason ReasonForChange);
 		//FDelegateHandle ModulesChangedHandle;
+	
+		FHoudiniToolsEditor& GetHoudiniTools() const { return *HoudiniToolsPtr; }
 
 	protected:
 
@@ -389,6 +396,9 @@ class HOUDINIENGINEEDITOR_API FHoudiniEngineEditor : public IHoudiniEngineEditor
 		// Delegate handle for OnDeleteActorsEnd
 		FDelegateHandle OnDeleteActorsEnd;
 
+		// Delegate handle for LevelEditorModule::OnRegisterTabs
+		FDelegateHandle OnLevelEditorRegisterTabsHandle;
+
 		// List of actors that HandleOnDeleteActorsBegin marked to _not_ be deleted. This
 		// is used to re-select these actors in HandleOnDeleteActorsEnd.
 		TArray<AActor*> ActorsToReselectOnDeleteActorsEnd;
@@ -400,4 +410,10 @@ class HOUDINIENGINEEDITOR_API FHoudiniEngineEditor : public IHoudiniEngineEditor
 
 		//NodeSync Tab
 		TSharedRef<class SDockTab> OnSpawnNodeSyncTab(const class FSpawnTabArgs& SpawnTabArgs);
+
+		//HoudiniTools Tab
+		TSharedRef<class SDockTab> OnSpawnHoudiniToolsTab(const class FSpawnTabArgs& SpawnTabArgs);
+
+		// Houdini Tools utility.
+		TSharedPtr<FHoudiniToolsEditor> HoudiniToolsPtr;
 };

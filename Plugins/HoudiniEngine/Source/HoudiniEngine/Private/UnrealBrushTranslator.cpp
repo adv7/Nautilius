@@ -35,6 +35,8 @@
 #include "Model.h"
 #include "Engine/Polys.h"
 #include "UnrealObjectInputRuntimeTypes.h"
+#include "UnrealObjectInputUtils.h"
+#include "UnrealObjectInputRuntimeUtils.h"
 
 #include "HoudiniEngineRuntimeUtils.h"
 
@@ -70,7 +72,7 @@ bool FUnrealBrushTranslator::CreateInputNodeForBrush(
 	if (InputBrushObject->ShouldIgnoreThisInput())
 		return true;
 
-	const bool bUseRefCountedInputSystem = FHoudiniEngineRuntimeUtils::IsRefCountedInputSystemEnabled();
+	const bool bUseRefCountedInputSystem = FUnrealObjectInputRuntimeUtils::IsRefCountedInputSystemEnabled();
 	FString FinalInputNodeName = NodeName;
 
 	FUnrealObjectInputIdentifier Identifier;
@@ -82,13 +84,13 @@ bool FUnrealBrushTranslator::CreateInputNodeForBrush(
 		const FUnrealObjectInputOptions Options(false, false, false, false, false);
 		Identifier = FUnrealObjectInputIdentifier(BrushActor, Options, true);
 		FUnrealObjectInputHandle Handle;
-		if (FHoudiniEngineUtils::NodeExistsAndIsNotDirty(Identifier, Handle))
+		if (FUnrealObjectInputUtils::NodeExistsAndIsNotDirty(Identifier, Handle))
 		{
 			HAPI_NodeId NodeId = -1;
-			if (FHoudiniEngineUtils::GetHAPINodeId(Handle, NodeId))
+			if (FUnrealObjectInputUtils::GetHAPINodeId(Handle, NodeId))
 			{
 				if (!bInputNodesCanBeDeleted)
-					FHoudiniEngineUtils::UpdateInputNodeCanBeDeleted(Handle, bInputNodesCanBeDeleted);
+					FUnrealObjectInputUtils::UpdateInputNodeCanBeDeleted(Handle, bInputNodesCanBeDeleted);
 
 				OutHandle = Handle;
 				InputNodeId = NodeId;
@@ -96,9 +98,9 @@ bool FUnrealBrushTranslator::CreateInputNodeForBrush(
 			}
 		}
 
-		FHoudiniEngineUtils::GetDefaultInputNodeName(Identifier, FinalInputNodeName);
-		if (FHoudiniEngineUtils::EnsureParentsExist(Identifier, ParentHandle, bInputNodesCanBeDeleted))
-			FHoudiniEngineUtils::GetHAPINodeId(ParentHandle, ParentNodeId);
+		FUnrealObjectInputUtils::GetDefaultInputNodeName(Identifier, FinalInputNodeName);
+		if (FUnrealObjectInputUtils::EnsureParentsExist(Identifier, ParentHandle, bInputNodesCanBeDeleted))
+			FUnrealObjectInputUtils::GetHAPINodeId(ParentHandle, ParentNodeId);
 	}
 
 	HAPI_NodeId InputObjectNodeId = -1;
@@ -111,7 +113,7 @@ bool FUnrealBrushTranslator::CreateInputNodeForBrush(
 	{
 		HAPI_NodeId NewNodeId = -1;
 		HOUDINI_CHECK_ERROR_RETURN(FHoudiniEngineUtils::CreateInputNode(FinalInputNodeName, NewNodeId, ParentNodeId), false);
-
+		
 		if (!FHoudiniEngineUtils::IsHoudiniNodeValid(NewNodeId))
 			return false;
 
@@ -154,7 +156,7 @@ bool FUnrealBrushTranslator::CreateInputNodeForBrush(
 		// The content has changed and now we don't have geo to output.
 		// Be sure to clean up existing nodes in Houdini.
 		if (HAPI_RESULT_SUCCESS != FHoudiniApi::DeleteNode(
-			FHoudiniEngine::Get().GetSession(), InputObjectNodeId))
+				FHoudiniEngine::Get().GetSession(), InputObjectNodeId))
 		{
 			HOUDINI_LOG_WARNING(TEXT("Failed to cleanup the previous input OBJ node for %s."), *(BrushActor->GetActorNameOrLabel()));
 		}
@@ -203,7 +205,7 @@ bool FUnrealBrushTranslator::CreateInputNodeForBrush(
 		HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::SetObjectTransform(
 			FHoudiniEngine::Get().GetSession(), InputObjectNodeId, &HapiTransform), false);
 	}
-
+	
 	//--------------------------------------------------------------------------------------------------
 	// Start processing the geo and add it to the input node
 	//--------------------------------------------------------------------------------------------------
@@ -223,8 +225,7 @@ bool FUnrealBrushTranslator::CreateInputNodeForBrush(
 	Part.pointCount = NumPoints;
 	Part.type = HAPI_PARTTYPE_MESH;
 
-	HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::SetPartInfo(
-		FHoudiniEngine::Get().GetSession(), InputNodeId, 0, &Part), false);
+	HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::SetPartInfo(FHoudiniEngine::Get().GetSession(), InputNodeId, 0, &Part), false);
 
 	// -----------------------------
 	// Vector - Point Attribute Info
@@ -340,7 +341,7 @@ bool FUnrealBrushTranslator::CreateInputNodeForBrush(
 
 		// Set the face counts as per the BSP nodes.
 		HOUDINI_CHECK_ERROR_RETURN(FHoudiniEngineUtils::HapiSetFaceCounts(
-			FaceCountBuffer, InputNodeId,	0), false);
+			FaceCountBuffer, InputNodeId, 0), false);
 
 		// -----------------------------
 		// Normal attribute
@@ -348,7 +349,7 @@ bool FUnrealBrushTranslator::CreateInputNodeForBrush(
 		HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::AddAttribute(
 			FHoudiniEngine::Get().GetSession(), InputNodeId, 0,
 			HAPI_UNREAL_ATTRIB_NORMAL, &AttributeInfoVertexVector), false);
-		
+
 		HOUDINI_CHECK_ERROR_RETURN(FHoudiniEngineUtils::HapiSetAttributeFloatData(
 			(const float*)OutNormals.GetData(), InputNodeId, 0, HAPI_UNREAL_ATTRIB_NORMAL, AttributeInfoVertexVector), false);
 
@@ -358,7 +359,7 @@ bool FUnrealBrushTranslator::CreateInputNodeForBrush(
 		HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::AddAttribute(
 			FHoudiniEngine::Get().GetSession(), InputNodeId, 0,
 			HAPI_UNREAL_ATTRIB_UV, &AttributeInfoVertexVector), false);
-		
+
 		HOUDINI_CHECK_ERROR_RETURN(FHoudiniEngineUtils::HapiSetAttributeFloatData(
 			(const float*)OutUV.GetData(), InputNodeId, 0, HAPI_UNREAL_ATTRIB_UV, AttributeInfoVertexVector), false);
 
@@ -392,7 +393,7 @@ bool FUnrealBrushTranslator::CreateInputNodeForBrush(
 		//Lists of material parameters
 		TMap<FString, TArray<float>> ScalarMaterialParameters;
 		TMap<FString, TArray<float>> VectorMaterialParameters;
-        TMap<FString, FHoudiniEngineIndexedStringMap> TextureMaterialParameters;
+		TMap<FString, FHoudiniEngineIndexedStringMap> TextureMaterialParameters;
 
 		bool bAttributeSuccess = false;
 		if (bInExportMaterialParametersAsAttributes)
@@ -425,16 +426,14 @@ bool FUnrealBrushTranslator::CreateInputNodeForBrush(
 			return false;
 	}
 
-	HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::CommitGeo(
-		FHoudiniEngine::Get().GetSession(), InputNodeId), false);
+	HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::CommitGeo(FHoudiniEngine::Get().GetSession(), InputNodeId), false);
 
 	if (bUseRefCountedInputSystem)
 	{
 		FUnrealObjectInputHandle Handle;
-		if (FHoudiniEngineUtils::AddNodeOrUpdateNode(Identifier, InputNodeId, Handle, InputObjectNodeId))
+		if (FUnrealObjectInputUtils::AddNodeOrUpdateNode(Identifier, InputNodeId, Handle, InputObjectNodeId))
 			OutHandle = Handle;
 	}
 
 	return true;
 }
-

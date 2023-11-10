@@ -299,7 +299,7 @@ UHoudiniPublicAPIAssetWrapper::SetAutoBakeEnabled_Implementation(const bool bInA
 	if (!GetValidHoudiniAssetComponentWithError(HAC))
 		return false;
 
-	HAC->SetBakeAfterNextCookEnabled(bInAutoBakeEnabled);
+	HAC->SetBakeAfterNextCook(bInAutoBakeEnabled ? EHoudiniBakeAfterNextCook::Always : EHoudiniBakeAfterNextCook::Disabled);
 
 	return true;
 }
@@ -2681,7 +2681,7 @@ UHoudiniPublicAPIAssetWrapper::GetInputParameters_Implementation(TMap<FName, UHo
 		if (!bSuccessfullyCopied)
 			bAnyFailures = true;
 		
-		OutInputs.Add(FName(HoudiniInput->GetName()), APIInput);
+		OutInputs.Add(FName(HoudiniInput->GetInputName()), APIInput);
 	}
 
 	return !bAnyFailures; 
@@ -4085,7 +4085,7 @@ UHoudiniPublicAPIAssetWrapper::FindValidHoudiniNodeInputParameter(const FName& I
 		UHoudiniInput* const Input = HAC->GetInputAt(Index);
 		if (!IsValid(Input))
 			continue;
-		if (Input->IsObjectPathParameter() && Input->GetName() == InputParameterName)
+		if (Input->IsObjectPathParameter() && Input->GetInputName() == InputParameterName)
 			return Input;
 	}
 
@@ -4109,7 +4109,7 @@ UHoudiniPublicAPIAssetWrapper::FindValidHoudiniNodeInputParameter(const FName& I
 		UHoudiniInput const* const Input = HAC->GetInputAt(Index);
 		if (!IsValid(Input))
 			continue;
-		if (Input->IsObjectPathParameter() && Input->GetName() == InputParameterName)
+		if (Input->IsObjectPathParameter() && Input->GetInputName() == InputParameterName)
 			return Input;
 	}
 
@@ -4132,22 +4132,31 @@ UHoudiniPublicAPIAssetWrapper::CreateAndPopulateAPIInput(const UHoudiniInput* In
 		case EHoudiniInputType::Curve:
 			APIInputClass = UHoudiniPublicAPICurveInput::StaticClass();
 			break;
-		case EHoudiniInputType::Asset:
-			APIInputClass = UHoudiniPublicAPIAssetInput::StaticClass();
-			break;
+
 		case EHoudiniInputType::World:
 			APIInputClass = UHoudiniPublicAPIWorldInput::StaticClass();
 			break;
-		case EHoudiniInputType::Landscape:
-			APIInputClass = UHoudiniPublicAPILandscapeInput::StaticClass();
+
+		// Deprecated input types
+		case EHoudiniInputType::Asset_DEPRECATED:
+			SetErrorMessage(TEXT("Asset inputs are now deprecated - use World Input instead."));
+			APIInputClass = UDEPRECATED_HoudiniPublicAPIAssetInput::StaticClass();
 			break;
-		case EHoudiniInputType::Skeletal:
-			// Not yet implemented
-			SetErrorMessage(FString::Printf(TEXT("GetInputAtIndex: Input type not yet implemented %d"), InputType));
+		case EHoudiniInputType::Landscape_DEPRECATED:
+			SetErrorMessage(TEXT("Landscape inputs are now deprecated - use World Input instead."));
+			APIInputClass = UDEPRECATED_HoudiniPublicAPILandscapeInput::StaticClass();
+			break;
+		case EHoudiniInputType::GeometryCollection_DEPRECATED:
+			SetErrorMessage(TEXT("Geometry Collection inputs are now deprecated - use Geometry Input instead."));
+			APIInputClass = UDEPRECATED_HoudiniPublicAPIGeometryCollectionInput::StaticClass();
+			break;
+
+		case EHoudiniInputType::Skeletal_DEPRECATED:
+			SetErrorMessage(TEXT("Skeletal Mesh inputs are now deprecated - using Geometry Input instead."));
+			APIInputClass = UHoudiniPublicAPIGeoInput::StaticClass();
 			return false;
-		case EHoudiniInputType::GeometryCollection:
-			APIInputClass = UHoudiniPublicAPIGeometryCollectionInput::StaticClass();
-			break;
+
+
 		case EHoudiniInputType::Invalid:
 			SetErrorMessage(FString::Printf(TEXT("GetInputAtIndex: Invalid input type %d"), InputType));
 			return false;

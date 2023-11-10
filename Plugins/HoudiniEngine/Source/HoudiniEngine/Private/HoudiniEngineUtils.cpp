@@ -43,6 +43,7 @@
 #include "HoudiniAssetActor.h"
 #include "HoudiniAssetComponent.h"
 #include "HoudiniEngine.h"
+#include "HoudiniEngineEditorSettings.h"
 #include "HoudiniEnginePrivatePCH.h"
 #include "HoudiniEngineRuntime.h"
 #include "HoudiniEngineRuntimePrivatePCH.h"
@@ -54,9 +55,6 @@
 #include "HoudiniInput.h"
 #include "HoudiniParameter.h"
 #include "HoudiniRuntimeSettings.h"
-
-#include "UnrealObjectInputManager.h"
-#include "UnrealObjectInputRuntimeTypes.h"
 
 #if WITH_EDITOR
 	#include "SAssetSelectionWidget.h"
@@ -1243,40 +1241,29 @@ FHoudiniEngineUtils::GatherLandscapeInputs(
 	if (!IsValid(HAC))
 		return;
 
-	int32 NumInputs = HAC->GetNumInputs();
-	
+	int32 NumInputs = HAC->GetNumInputs();	
 	for (int32 InputIndex = 0; InputIndex < NumInputs; InputIndex++ )
 	{
 		UHoudiniInput* CurrentInput = HAC->GetInputAt(InputIndex);
 		if (!CurrentInput)
 			continue;
 		
-		if (CurrentInput->GetInputType() == EHoudiniInputType::World)
+		if (CurrentInput->GetInputType() != EHoudiniInputType::World)
+			continue;
+
+		// Check if we have any landscapes as world inputs.
+		CurrentInput->ForAllHoudiniInputObjects([&AllInputLandscapes](UHoudiniInputObject* InputObject)
 		{
-			// Check if we have any landscapes as world inputs.
-			CurrentInput->ForAllHoudiniInputObjects([&AllInputLandscapes](UHoudiniInputObject* InputObject)
+			UHoudiniInputLandscape* InputLandscape = Cast<UHoudiniInputLandscape>(InputObject);
+			if (InputLandscape)
 			{
-				UHoudiniInputLandscape* InputLandscape = Cast<UHoudiniInputLandscape>(InputObject);
-				if (InputLandscape)
+				ALandscapeProxy* LandscapeProxy = InputLandscape->GetLandscapeProxy();
+				if (IsValid(LandscapeProxy))
 				{
-					ALandscapeProxy* LandscapeProxy = InputLandscape->GetLandscapeProxy();
-					if (IsValid(LandscapeProxy))
-					{
-						AllInputLandscapes.Add(LandscapeProxy);
-					}
+					AllInputLandscapes.Add(LandscapeProxy);
 				}
-			}, true);
-		}
-		
-		if (CurrentInput->GetInputType() != EHoudiniInputType::Landscape)
-			continue;
-
-		// Get the landscape input's landscape
-		ALandscapeProxy* InputLandscape = Cast<ALandscapeProxy>(CurrentInput->GetInputObjectAt(0));
-		if (!InputLandscape)
-			continue;
-
-		AllInputLandscapes.Add(InputLandscape);
+			}
+		}, true);
 	}
 }
 
@@ -1344,19 +1331,36 @@ FHoudiniEngineUtils::LoadLibHAPI(FString & StoredLibHAPILocation)
 	FString LibHAPIName = FHoudiniEngineRuntimeUtils::GetLibHAPIName();
 
 	// If we have a custom location specified through settings, attempt to use that.
-	bool bCustomPathFound = false;
 	const UHoudiniRuntimeSettings * HoudiniRuntimeSettings = GetDefault< UHoudiniRuntimeSettings >();
-	if (HoudiniRuntimeSettings && HoudiniRuntimeSettings->bUseCustomHoudiniLocation)
+	const UHoudiniEngineEditorSettings * HoudiniEngineEditorSettings = GetDefault< UHoudiniEngineEditorSettings >();
+	bool bCustomPathFound = false;
+	if (IsValid(HoudiniEngineEditorSettings) || IsValid(HoudiniRuntimeSettings))
 	{
-		// Create full path to libHAPI binary.
-		FString CustomHoudiniLocationPath = HoudiniRuntimeSettings->CustomHoudiniLocation.Path;
-		if (!CustomHoudiniLocationPath.IsEmpty())
+		bool bUseCustomPath = false;
+		FString CustomHoudiniLocationPath;
+
+		// The user can set a editor per-project user setting in UHoudiniEngineEditorSettings to determine if
+		// the custom location should be disabled, read from the editor per-project user settings or read from the
+		// per-project settings.
+		if (HoudiniEngineEditorSettings && HoudiniEngineEditorSettings->UseCustomHoudiniLocation == EHoudiniEngineEditorSettingUseCustomLocation::Enabled)
+		{
+			bUseCustomPath = true;
+			CustomHoudiniLocationPath = HoudiniEngineEditorSettings->CustomHoudiniLocation.Path;
+		}
+		else if ((!HoudiniEngineEditorSettings || HoudiniEngineEditorSettings->UseCustomHoudiniLocation == EHoudiniEngineEditorSettingUseCustomLocation::Project) &&
+			HoudiniRuntimeSettings && HoudiniRuntimeSettings->bUseCustomHoudiniLocation)
+		{
+			bUseCustomPath = true;
+			CustomHoudiniLocationPath = HoudiniRuntimeSettings->CustomHoudiniLocation.Path;
+		}
+
+		if (bUseCustomPath && !CustomHoudiniLocationPath.IsEmpty())
 		{
 			// Convert path to absolute if it is relative.
 			if (FPaths::IsRelative(CustomHoudiniLocationPath))
 				CustomHoudiniLocationPath = FPaths::ConvertRelativePathToFull(CustomHoudiniLocationPath);
 
-			FString LibHAPICustomPath = FString::Printf(TEXT("%s/%s"), *CustomHoudiniLocationPath, *LibHAPIName);
+			const FString LibHAPICustomPath = FString::Printf(TEXT("%s/%s"), *CustomHoudiniLocationPath, *LibHAPIName);
 
 			if (FPaths::FileExists(LibHAPICustomPath))
 			{
@@ -4777,6 +4781,25 @@ FHoudiniEngineUtils::HapiGetAttributeDataAsFloat(
 
 		return true;
 	}
+    else if (AttributeInfo.storage == HAPI_STORAGETYPE_FLOAT64)
+    {
+        // Allocate sufficient buffer for data.
+        OutData.SetNum(Count * AttributeInfo.tupleSize);
+
+		TArray<double> Float64Data;
+        Float64Data.SetNum(OutData.Num());
+
+        // Fetch the values
+        HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::GetAttributeFloat64Data(
+		    FHoudiniEngine::Get().GetSession(), InGeoId,
+            InPartId, InAttribName, &AttributeInfo, -1,
+            &Float64Data[0], Start, Count), false);
+
+		for (int Index = 0; Index < OutData.Num(); Index++)
+            OutData[Index] = static_cast<float>(Float64Data[Index]);
+
+        return true;
+    }
 	else if (AttributeInfo.storage == HAPI_STORAGETYPE_INT)
 	{
 		// Expected Float, found an int, try to convert the attribute
@@ -7059,6 +7082,216 @@ FHoudiniEngineUtils::SetGenericPropertyAttribute(
 	return true;
 }
 
+
+TArray<FName>
+FHoudiniEngineUtils::GetDefaultActorTags(const AActor* InActor)
+{
+	if (!IsValid(InActor))
+	{
+		return {};
+	}
+
+	 return InActor->GetClass()->GetDefaultObject<AActor>()->Tags;
+}
+
+
+TArray<FName>
+FHoudiniEngineUtils::GetDefaultComponentTags(const UActorComponent* InComponent)
+{
+	if (!IsValid(InComponent))
+	{
+		return {};
+	}
+
+	 return InComponent->GetClass()->GetDefaultObject<UActorComponent>()->ComponentTags;
+}
+
+
+void
+FHoudiniEngineUtils::ApplyTagsToActorOnly(const TArray<FHoudiniGenericAttribute>& GenericPropertyAttributes,
+                                             TArray<FName>& OutActorTags)
+{
+	for (const FHoudiniGenericAttribute& Attribute : GenericPropertyAttributes)
+	{
+		if (Attribute.AttributeName.StartsWith("ActorTag") || Attribute.AttributeName.StartsWith("Tag"))
+		{
+			OutActorTags.AddUnique(FName(Attribute.GetStringValue()));
+		}
+	}
+}
+
+
+void
+FHoudiniEngineUtils::ApplyTagsToActorAndComponents(AActor* InActor, bool bKeepActorTags, const TArray<FHoudiniGenericAttribute>& GenericPropertyAttributes)
+{
+	auto ForEachComponentFn = [InActor](TFunctionRef<void(UActorComponent*)> Fn)
+	{
+		for (UActorComponent* Component : InActor->GetComponents())
+		{
+			if (!IsValid(Component))
+			{
+				continue;
+			}
+			Fn(Component);
+		}
+	};
+	
+	if (!bKeepActorTags)
+	{
+		InActor->Tags = FHoudiniEngineUtils::GetDefaultActorTags(InActor);
+		ForEachComponentFn([](UActorComponent* Component)
+		{
+			Component->ComponentTags = FHoudiniEngineUtils::GetDefaultComponentTags(Component);
+		});
+	}
+
+
+	for (const FHoudiniGenericAttribute& Attribute : GenericPropertyAttributes)
+	{
+
+		bool bApplyTagToActor = false;
+		bool bApplyTagToMainComponent = false;
+		bool bApplyTagToAllComponents = false;
+
+		if (Attribute.AttributeName.StartsWith("ActorTag"))
+		{
+			bApplyTagToActor = true;
+		}
+		if (Attribute.AttributeName.StartsWith("MainComponentTag"))
+		{
+			bApplyTagToMainComponent = true;
+		}
+		if (Attribute.AttributeName.StartsWith("ComponentTag"))
+		{
+			bApplyTagToAllComponents = true;
+		}
+		if (Attribute.AttributeName.StartsWith("Tag"))
+		{
+			bApplyTagToActor = true;
+			bApplyTagToAllComponents = true;
+		}
+		
+		if (bApplyTagToActor)
+		{
+			InActor->Tags.AddUnique(FName(Attribute.GetStringValue()));
+		}
+
+		if (bApplyTagToAllComponents)
+		{
+			ForEachComponentFn([&Attribute](UActorComponent* Component)
+			{
+				Component->ComponentTags.AddUnique(FName(Attribute.GetStringValue()));
+			});
+		}
+		else if(bApplyTagToMainComponent)
+		{
+			InActor->GetRootComponent()->ComponentTags.AddUnique(FName(Attribute.GetStringValue()));
+		}
+	}
+}
+
+
+bool
+FHoudiniEngineUtils::IsKeepTagsEnabled(const TArray<FHoudiniGeoPartObject>& InHGPOs)
+{
+	for (const FHoudiniGeoPartObject& CurHGPO : InHGPOs)
+	{
+		if (CurHGPO.bKeepTags)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+
+bool
+FHoudiniEngineUtils::IsKeepTagsEnabled(const FHoudiniGeoPartObject* InHGPO)
+{
+	if (InHGPO)
+	{
+		return InHGPO->bKeepTags;
+	}
+	
+	return false;
+}
+
+
+void
+FHoudiniEngineUtils::KeepOrClearComponentTags(
+	UActorComponent* ActorComponent,
+	const TArray<FHoudiniGeoPartObject>& InHGPOs)
+{
+	if (!IsValid(ActorComponent))
+	{
+		return;
+	}
+	const bool bKeepTags = IsKeepTagsEnabled(InHGPOs);
+	KeepOrClearComponentTags(ActorComponent, bKeepTags);
+}
+
+
+void
+FHoudiniEngineUtils::KeepOrClearComponentTags(UActorComponent* ActorComponent, const FHoudiniGeoPartObject* InHGPO)
+{
+	if (!IsValid(ActorComponent))
+	{
+		return;
+	}
+	const bool bKeepTags = IsKeepTagsEnabled(InHGPO);
+	KeepOrClearComponentTags(ActorComponent, bKeepTags);
+}
+
+
+void
+FHoudiniEngineUtils::KeepOrClearComponentTags(UActorComponent* ActorComponent, bool bKeepTags)
+{
+	if (!bKeepTags)
+	{
+		// Ensure that we revert existing tags to their default state if this is an actor component.
+		const UActorComponent* DefaultComponent = ActorComponent->GetClass()->GetDefaultObject<UActorComponent>();
+		ActorComponent->ComponentTags = DefaultComponent->ComponentTags;
+	}
+}
+
+
+void
+FHoudiniEngineUtils::KeepOrClearActorTags(AActor* Actor, bool bApplyToActor, bool bApplyToComponents, const FHoudiniGeoPartObject* InHGPO)
+{
+	if (!IsValid(Actor))
+	{
+		return;
+	}
+
+	if (InHGPO && InHGPO->bKeepTags)
+	{
+		return;
+	}
+
+	if (bApplyToActor)
+	{
+		// Revert actor tags to their default value
+		Actor->Tags = GetDefaultActorTags(Actor);
+	}
+
+	if (bApplyToComponents)
+	{
+		// Revert all component tags to their default value
+		const TSet<UActorComponent*>& Components = Actor->GetComponents();
+		for (UActorComponent* Component : Components)
+		{
+			if (!IsValid(Component))
+			{
+				continue;
+			}
+
+			// Ensure that we revert existing tags
+			const UActorComponent* DefaultComponent = Component->GetClass()->GetDefaultObject<UActorComponent>();
+			Component->ComponentTags = DefaultComponent->ComponentTags;
+		}
+	}
+}
+
 void
 FHoudiniEngineUtils::AddHoudiniMetaInformationToPackage(
 	UPackage * Package, UObject * Object, const FString& Key, const FString& Value)
@@ -8257,490 +8490,6 @@ FHoudiniEngineUtils::HapiCookNode(const HAPI_NodeId& InNodeId, HAPI_CookOptions*
 	}
 }
 
-bool
-FHoudiniEngineUtils::FindNodeViaManager(
-	const FUnrealObjectInputIdentifier& InIdentifier, FUnrealObjectInputHandle& OutHandle)
-{
-	if (!InIdentifier.IsValid())
-		return false;
-	
-	// Check with the manager if there already is a node for this object
-	FUnrealObjectInputManager* Manager = FUnrealObjectInputManager::Get();
-	if (!Manager)
-		return false;
-
-	FUnrealObjectInputHandle Handle;
-	if (!Manager->FindNode(InIdentifier, Handle))
-		return false;
-
-	OutHandle = Handle;
-	return true;
-}
-
-FUnrealObjectInputNode*
-FHoudiniEngineUtils::GetNodeViaManager(const FUnrealObjectInputHandle& InHandle)
-{
-	if (!InHandle.IsValid())
-		return nullptr;
-	
-	FUnrealObjectInputManager const* const Manager = FUnrealObjectInputManager::Get();
-	if (!Manager)
-		return nullptr;
-
-	FUnrealObjectInputNode* Node = nullptr;
-	if (!Manager->GetNode(InHandle, Node))
-		return nullptr;
-
-	return Node;
-}
-
-FUnrealObjectInputNode*
-FHoudiniEngineUtils::GetNodeViaManager(const FUnrealObjectInputIdentifier& InIdentifier, FUnrealObjectInputHandle& OutHandle)
-{
-	if (!InIdentifier.IsValid())
-		return nullptr;
-	
-	FUnrealObjectInputManager const* const Manager = FUnrealObjectInputManager::Get();
-	if (!Manager)
-		return nullptr;
-
-	FUnrealObjectInputHandle Handle;
-	if (!Manager->FindNode(InIdentifier, Handle))
-		return nullptr;
-
-	FUnrealObjectInputNode* Node = nullptr;
-	if (!Manager->GetNode(Handle, Node))
-		return nullptr;
-
-	OutHandle = Handle;
-	return Node;
-}
-
-bool
-FHoudiniEngineUtils::FindParentNodeViaManager(
-	const FUnrealObjectInputIdentifier& InIdentifier, FUnrealObjectInputHandle& OutParentHandle)
-{
-	if (!InIdentifier.IsValid())
-		return false;
-	
-	// Check with the manager if there already is a node for this object
-	FUnrealObjectInputManager* Manager = FUnrealObjectInputManager::Get();
-	if (!Manager)
-		return false;
-
-	FUnrealObjectInputNode* Node = nullptr;
-	if (!Manager->GetNode(InIdentifier, Node) || !Node)
-		return false;
-	
-	OutParentHandle = Node->GetParent();
-	return true;
-}
-
-bool
-FHoudiniEngineUtils::AreHAPINodesValid(const FUnrealObjectInputHandle& InHandle)
-{
-	if (!InHandle.IsValid())
-		return false;
-	
-	// Check with the manager if there already is a node for this object
-	FUnrealObjectInputManager* Manager = FUnrealObjectInputManager::Get();
-	if (!Manager)
-		return false;
-
-	return Manager->AreHAPINodesValid(InHandle);
-}
-
-bool
-FHoudiniEngineUtils::NodeExistsAndIsNotDirty(const FUnrealObjectInputIdentifier& InIdentifier, FUnrealObjectInputHandle& OutHandle)
-{
-	if (!FindNodeViaManager(InIdentifier, OutHandle) || !AreHAPINodesValid(OutHandle) || FHoudiniEngineRuntimeUtils::IsInputNodeDirty(InIdentifier))
-		return false;
-
-	return true;
-}
-
-bool
-FHoudiniEngineUtils::AreReferencedHAPINodesValid(const FUnrealObjectInputHandle& InHandle)
-{
-	if (!InHandle.IsValid() || InHandle.GetIdentifier().GetNodeType() != EUnrealObjectInputNodeType::Reference)
-		return false;
-	
-	// Check with the manager if there already is a node for this object
-	FUnrealObjectInputManager* Manager = FUnrealObjectInputManager::Get();
-	if (!Manager)
-		return false;
-
-	FUnrealObjectInputNode const* Node = nullptr;
-	if (!Manager->GetNode(InHandle, Node))
-		return false;
-
-	if (!Node)
-		return false;
-
-	FUnrealObjectInputReferenceNode const* const RefNode = static_cast<FUnrealObjectInputReferenceNode const*>(Node);
-	return RefNode->AreReferencedHAPINodesValid();
-}
-
-bool
-FHoudiniEngineUtils::AddNodeOrUpdateNode(
-	const FUnrealObjectInputIdentifier& InIdentifier,
-	const int32 InNodeId,
-	FUnrealObjectInputHandle& OutHandle,
-	const int32 InObjectNodeId,
-	TSet<FUnrealObjectInputHandle> const* const InReferencedNodes,
-	const bool& bInputNodesCanBeDeleted,
-	const TOptional<int32> InReferencesConnectToNodeId)
-{
-	if (!InIdentifier.IsValid())
-		return false;
-	
-	FUnrealObjectInputManager* Manager = FUnrealObjectInputManager::Get();
-	if (!Manager)
-		return false;
-
-	FUnrealObjectInputHandle Handle;
-	const bool bNodeExists = FindNodeViaManager(InIdentifier, Handle) && Handle.IsValid();
-
-	bool bSuccess = false;
-	switch (InIdentifier.GetNodeType())
-	{
-		case EUnrealObjectInputNodeType::Container:
-			if (bNodeExists)
-			{
-				bSuccess = Manager->UpdateContainer(InIdentifier, InNodeId);
-			}
-			else
-			{
-				bSuccess = Manager->AddContainer(InIdentifier, InNodeId, Handle);
-			}
-			break;
-		case EUnrealObjectInputNodeType::Reference:
-			if (bNodeExists)
-			{
-				bSuccess = Manager->UpdateReferenceNode(InIdentifier, InObjectNodeId, InNodeId, InReferencedNodes, InReferencesConnectToNodeId);
-			}
-			else
-			{
-				bSuccess = Manager->AddReferenceNode(InIdentifier, InObjectNodeId, InNodeId, Handle, InReferencedNodes, InReferencesConnectToNodeId.Get(INDEX_NONE));
-			}
-			break;
-		case EUnrealObjectInputNodeType::Leaf:
-			if (bNodeExists)
-			{
-				bSuccess = Manager->UpdateLeaf(InIdentifier, InObjectNodeId, InNodeId);
-			}
-			else
-			{
-				bSuccess = Manager->AddLeaf(InIdentifier, InObjectNodeId, InNodeId, Handle);
-			}
-			break;
-		case EUnrealObjectInputNodeType::Invalid:
-			HOUDINI_LOG_WARNING(TEXT("[FHoudiniEngineUtils::AddNodeOrUpdateNode] Invalid NodeType in identifier."));
-			bSuccess = false;
-			break;
-	}
-
-	if (!bSuccess)
-		return false;
-
-	// Make sure to prevent deletion of the node and its parents if needed
-	if (!bInputNodesCanBeDeleted)
-	{
-		//Manager->EnsureParentsExist(InIdentifier, Handle, bInputNodesCanBeDeleted);
-		FHoudiniEngineUtils::UpdateInputNodeCanBeDeleted(Handle, bInputNodesCanBeDeleted);
-	}
-
-	OutHandle = Handle;
-	return bSuccess;
-}
-
-bool
-FHoudiniEngineUtils::GetHAPINodeId(const FUnrealObjectInputHandle& InHandle, int32& OutNodeId)
-{
-	if (!InHandle.IsValid())
-		return false;
-	
-	FUnrealObjectInputManager const* const Manager = FUnrealObjectInputManager::Get();
-	if (!Manager)
-		return false;
-	
-	const FUnrealObjectInputNode* Node;
-	Manager->GetNode(InHandle, Node);
-	OutNodeId = Node->GetHAPINodeId();
-
-	return true;
-}
-
-bool
-FHoudiniEngineUtils::UpdateInputNodeCanBeDeleted(const FUnrealObjectInputHandle& InHandle, const bool& bCanBeDeleted)
-{
-	if (!InHandle.IsValid())
-		return false;
-
-	FUnrealObjectInputManager const* const Manager = FUnrealObjectInputManager::Get();
-	if (!Manager)
-		return false;
-
-	FUnrealObjectInputNode* Node = nullptr;
-	Manager->GetNode(InHandle, Node);
-
-	if (!Node)
-		return false;
-
-	// Only set the value to false if it isnt already
-	if(!bCanBeDeleted)
-		Node->SetCanBeDeleted(bCanBeDeleted);
-
-	return true;
-}
-
-bool
-FHoudiniEngineUtils::GetDefaultInputNodeName(const FUnrealObjectInputIdentifier& InIdentifier, FString& OutNodeName)
-{
-	if (!InIdentifier.IsValid())
-		return false;
-	
-	FUnrealObjectInputManager const* const Manager = FUnrealObjectInputManager::Get();
-	if (!Manager)
-		return false;
-
-	OutNodeName = Manager->GetDefaultNodeName(InIdentifier);
-	return true;
-}
-
-bool
-FHoudiniEngineUtils::EnsureParentsExist(const FUnrealObjectInputIdentifier& InIdentifier, FUnrealObjectInputHandle& OutParentHandle, const bool& bInputNodesCanBeDeleted)
-{
-	if (!InIdentifier.IsValid())
-		return false;
-	
-	FUnrealObjectInputManager* const Manager = FUnrealObjectInputManager::Get();
-	if (!Manager)
-		return false;
-
-	return Manager->EnsureParentsExist(InIdentifier, OutParentHandle, bInputNodesCanBeDeleted);
-}
-
-bool
-FHoudiniEngineUtils::SetReferencedNodes(const FUnrealObjectInputHandle& InRefNodeHandle, const TSet<FUnrealObjectInputHandle>& InReferencedNodes)
-{
-	if (!InRefNodeHandle.IsValid())
-		return false;
-	
-	FUnrealObjectInputManager const* const Manager = FUnrealObjectInputManager::Get();
-	if (!Manager)
-		return false;
-
-	FUnrealObjectInputNode* Node = nullptr;
-	if (!Manager->GetNode(InRefNodeHandle, Node))
-		return false;
-
-	FUnrealObjectInputReferenceNode* RefNode = static_cast<FUnrealObjectInputReferenceNode*>(Node);
-	if (!RefNode)
-		return false;
-
-	RefNode->SetReferencedNodes(InReferencedNodes);
-	return true;
-}
-
-bool
-FHoudiniEngineUtils::GetReferencedNodes(const FUnrealObjectInputHandle& InRefNodeHandle, TSet<FUnrealObjectInputHandle>& OutReferencedNodes)
-{
-	if (!InRefNodeHandle.IsValid())
-		return false;
-	
-	FUnrealObjectInputManager const* const Manager = FUnrealObjectInputManager::Get();
-	if (!Manager)
-		return false;
-
-	FUnrealObjectInputNode* Node = nullptr;
-	if (!Manager->GetNode(InRefNodeHandle, Node))
-		return false;
-
-	FUnrealObjectInputReferenceNode* RefNode = static_cast<FUnrealObjectInputReferenceNode*>(Node);
-	if (!RefNode)
-		return false;
-
-	RefNode->GetReferencedNodes(OutReferencedNodes);
-	return true;
-}
-
-bool
-FHoudiniEngineUtils::BuildMeshInputObjectIdentifiers(
-	UObject const* const InInputObject,
-	const bool bInExportMainMesh,
-	const bool bInExportLODs,
-	const bool bInExportSockets,
-	const bool bInExportColliders,
-	const bool bForceCreateReferenceNode,
-	bool &bOutSingleLeafNodeOnly,
-	FUnrealObjectInputIdentifier& OutReferenceNode,
-	TArray<FUnrealObjectInputIdentifier>& OutPerOptionIdentifiers)
-{
-	constexpr bool bDefaultImportAsReference = false;
-	constexpr bool bDefaultImportAsReferenceRotScaleEnabled = false;
-	constexpr bool bDefaultExportLODs = false;
-	constexpr bool bDefaultExportSockets = false;
-	constexpr bool bDefaultExportColliders = false;
-	const FUnrealObjectInputOptions DefaultOptions(
-		bDefaultImportAsReference,
-		bDefaultImportAsReferenceRotScaleEnabled,
-		bDefaultExportLODs,
-		bDefaultExportSockets,
-		bDefaultExportColliders);
-
-	// Determine number of leaves
-	uint32 NumLeaves = 0;
-	if (bInExportMainMesh)
-		NumLeaves++;
-	if (bInExportLODs)
-		NumLeaves++;
-	if (bInExportSockets)
-		NumLeaves++;
-	if (bInExportColliders)
-		NumLeaves++;
-	if (NumLeaves <= 1 && !bForceCreateReferenceNode)
-	{
-		// Only one active option, we can create a leaf node and not a reference node
-		FUnrealObjectInputOptions Options = DefaultOptions;
-		Options.bExportLODs = bInExportLODs;
-		Options.bExportSockets = bInExportSockets;
-		Options.bExportColliders = bInExportColliders;
-
-		constexpr bool bIsLeaf = true;
-		bOutSingleLeafNodeOnly = true;
-		OutReferenceNode = FUnrealObjectInputIdentifier();
-		OutPerOptionIdentifiers = {FUnrealObjectInputIdentifier(InInputObject, Options, bIsLeaf)};
-		return true;
-	}
-
-	bOutSingleLeafNodeOnly = false;
-	// Construct the reference node's identifier
-	{
-		FUnrealObjectInputOptions Options = DefaultOptions;
-		Options.bExportLODs = bInExportLODs;
-		Options.bExportSockets = bInExportSockets;
-		Options.bExportColliders = bInExportColliders;
-		
-		constexpr bool bIsLeaf = false;
-		OutReferenceNode = FUnrealObjectInputIdentifier(InInputObject, Options, bIsLeaf);
-	}
-
-	// Construct per-option identifiers
-	TArray<FUnrealObjectInputIdentifier> PerOptionIdentifiers;
-	// First one is the main mesh only, so all options false
-	if (bInExportMainMesh)
-	{
-		constexpr bool bIsLeaf = true;
-		FUnrealObjectInputOptions Options = DefaultOptions;
-		// TODO: add a specific main mesh option?
-		PerOptionIdentifiers.Add(FUnrealObjectInputIdentifier(InInputObject, Options, bIsLeaf));
-	}
-	
-	if (bInExportLODs)
-	{
-		constexpr bool bIsLeaf = true;
-		FUnrealObjectInputOptions Options = DefaultOptions;
-		Options.bExportLODs = true;
-		PerOptionIdentifiers.Add(FUnrealObjectInputIdentifier(InInputObject, Options, bIsLeaf));
-	}
-
-	if (bInExportSockets)
-	{
-		constexpr bool bIsLeaf = true;
-		FUnrealObjectInputOptions Options = DefaultOptions;
-		Options.bExportSockets = true;
-		PerOptionIdentifiers.Add(FUnrealObjectInputIdentifier(InInputObject, Options, bIsLeaf));
-	}
-
-	if (bInExportColliders)
-	{
-		constexpr bool bIsLeaf = true;
-		FUnrealObjectInputOptions Options = DefaultOptions;
-		Options.bExportColliders = true;
-		PerOptionIdentifiers.Add(FUnrealObjectInputIdentifier(InInputObject, Options, bIsLeaf));
-	}
-
-	OutPerOptionIdentifiers = MoveTemp(PerOptionIdentifiers);
-	return true;
-}
-
-bool
-FHoudiniEngineUtils::BuildLandscapeSplinesInputObjectIdentifiers(
-	ULandscapeSplinesComponent const* const InSplinesComponent,
-	const bool bInExportSplineCurves,
-	const bool bInExportControlPoints,
-	const bool bInExportLeftRightCurves,
-	const bool bForceCreateReferenceNode,
-	bool &bOutSingleLeafNodeOnly,
-	FUnrealObjectInputIdentifier& OutReferenceNode,
-	TArray<FUnrealObjectInputIdentifier>& OutPerOptionIdentifiers)
-{
-	const FUnrealObjectInputOptions DefaultOptions;
-
-	// Determine number of leaves
-	uint32 NumLeaves = 0;
-	if (bInExportSplineCurves)
-		NumLeaves++;
-	if (bInExportControlPoints)
-		NumLeaves++;
-	if (bInExportLeftRightCurves)
-		NumLeaves++;
-	if (NumLeaves <= 1 && !bForceCreateReferenceNode)
-	{
-		// Only one active option, we can create a leaf node and not a reference node
-		FUnrealObjectInputOptions Options = DefaultOptions;
-		Options.bExportLandscapeSplineControlPoints = bInExportControlPoints;
-		Options.bExportLandscapeSplineLeftRightCurves = bInExportLeftRightCurves;
-
-		constexpr bool bIsLeaf = true;
-		bOutSingleLeafNodeOnly = true;
-		OutReferenceNode = FUnrealObjectInputIdentifier();
-		OutPerOptionIdentifiers = {FUnrealObjectInputIdentifier(InSplinesComponent, Options, bIsLeaf)};
-		return true;
-	}
-
-	bOutSingleLeafNodeOnly = false;
-	// Construct the reference node's identifier
-	{
-		FUnrealObjectInputOptions Options = DefaultOptions;
-		Options.bExportLandscapeSplineControlPoints = bInExportControlPoints;
-		Options.bExportLandscapeSplineLeftRightCurves = bInExportLeftRightCurves;
-		
-		constexpr bool bIsLeaf = false;
-		OutReferenceNode = FUnrealObjectInputIdentifier(InSplinesComponent, Options, bIsLeaf);
-	}
-
-	// Construct per-option identifiers
-	TArray<FUnrealObjectInputIdentifier> PerOptionIdentifiers;
-	// First one is the spline curves only, so all options false
-	if (bInExportSplineCurves)
-	{
-		constexpr bool bIsLeaf = true;
-		const FUnrealObjectInputOptions Options = DefaultOptions;
-		// TODO: add a specific spline curves option?
-		PerOptionIdentifiers.Add(FUnrealObjectInputIdentifier(InSplinesComponent, Options, bIsLeaf));
-	}
-	
-	if (bInExportControlPoints)
-	{
-		constexpr bool bIsLeaf = true;
-		FUnrealObjectInputOptions Options = DefaultOptions;
-		Options.bExportLandscapeSplineControlPoints = true;
-		PerOptionIdentifiers.Add(FUnrealObjectInputIdentifier(InSplinesComponent, Options, bIsLeaf));
-	}
-
-	if (bInExportLeftRightCurves)
-	{
-		constexpr bool bIsLeaf = true;
-		FUnrealObjectInputOptions Options = DefaultOptions;
-		Options.bExportLandscapeSplineLeftRightCurves = true;
-		PerOptionIdentifiers.Add(FUnrealObjectInputIdentifier(InSplinesComponent, Options, bIsLeaf));
-	}
-
-	OutPerOptionIdentifiers = MoveTemp(PerOptionIdentifiers);
-	return true;
-}
 
 HAPI_Result
 FHoudiniEngineUtils::CreateInputNode(const FString& InNodeLabel, HAPI_NodeId& OutNodeId, const int32 InParentNodeId)
@@ -8788,32 +8537,6 @@ FHoudiniEngineUtils::CreateInputNode(const FString& InNodeLabel, HAPI_NodeId& Ou
 }
 
 bool
-FHoudiniEngineUtils::SetObjectMergeXFormTypeToWorldOrigin(const HAPI_NodeId& InObjMergeNodeId)
-{
-	HAPI_Session const* const Session = FHoudiniEngine::Get().GetSession();
-	
-	IUnrealObjectInputManager* const Manager = FUnrealObjectInputManager::Get();
-	if (!Manager)
-		return false;
-		
-	const HAPI_NodeId WorldOriginNodeId = Manager->GetWorldOriginHAPINodeId();
-	if (WorldOriginNodeId < 0)
-	{
-		HOUDINI_LOG_WARNING(TEXT("[FHoudiniEngineUtils::SetObjectMergeXFormTypeToWorldOrigin] Could not find/create world origin null."));
-		return false;
-	}
-
-	// Set the transform value to "Into Specified Object"
-	HOUDINI_CHECK_ERROR_RETURN(
-		FHoudiniApi::SetParmIntValue(Session, InObjMergeNodeId, TCHAR_TO_UTF8(TEXT("xformtype")), 0, 2), false);
-	// Set the transform object to the world origin null from the manager
-	HOUDINI_CHECK_ERROR_RETURN(
-		FHoudiniApi::SetParmNodeValue(Session, InObjMergeNodeId, TCHAR_TO_UTF8(TEXT("xformpath")), WorldOriginNodeId), false);
-
-	return true;
-}
-
-bool
 FHoudiniEngineUtils::HapiConnectNodeInput(const int32& InNodeId, const int32& InputIndex, const int32& InNodeIdToConnect, const int32& OutputIndex, const int32& InXFormType)
 {
 	// Connect the node ids
@@ -8835,293 +8558,6 @@ FHoudiniEngineUtils::HapiConnectNodeInput(const int32& InNodeId, const int32& In
 	}
 
 	return true;
-}
-
-bool
-FHoudiniEngineUtils::SetReferencesNodeConnectToNodeId(const FUnrealObjectInputIdentifier& InRefNodeIdentifier, const HAPI_NodeId InNodeId)
-{
-	// Identifier must be valid and for a reference node
-	if (!InRefNodeIdentifier.IsValid() || InRefNodeIdentifier.GetNodeType() != EUnrealObjectInputNodeType::Reference)
-		return false;
-
-	IUnrealObjectInputManager* const Manager = FUnrealObjectInputManager::Get();
-	if (!Manager)
-		return false;
-
-	FUnrealObjectInputNode* Node = nullptr;
-	if (!Manager->GetNode(InRefNodeIdentifier, Node))
-		return false;
-
-	FUnrealObjectInputReferenceNode* const RefNode = static_cast<FUnrealObjectInputReferenceNode*>(Node);
-	if (!RefNode)
-		return false;
-
-	RefNode->SetReferencesConnectToNodeId(InNodeId);
-
-	return true;
-}
-
-bool
-FHoudiniEngineUtils::ConnectReferencedNodesToMerge(const FUnrealObjectInputIdentifier& InRefNodeIdentifier)
-{
-	// Identifier must be valid and for a reference node
-	if (!InRefNodeIdentifier.IsValid() || InRefNodeIdentifier.GetNodeType() != EUnrealObjectInputNodeType::Reference)
-		return false;
-
-	if (!AreHAPINodesValid(InRefNodeIdentifier))
-		return false;
-	
-	if (!AreReferencedHAPINodesValid(InRefNodeIdentifier))
-		return false;
-
-	IUnrealObjectInputManager* const Manager = FUnrealObjectInputManager::Get();
-	if (!Manager)
-		return false;
-
-	FUnrealObjectInputNode* Node = nullptr;
-	if (!Manager->GetNode(InRefNodeIdentifier, Node))
-		return false;
-
-	FUnrealObjectInputReferenceNode* const RefNode = static_cast<FUnrealObjectInputReferenceNode*>(Node);
-	if (!RefNode)
-		return false;
-
-	const HAPI_Session* const Session = FHoudiniEngine::Get().GetSession();
-	const FUnrealObjectInputHAPINodeId RefNodeId = RefNode->GetReferencesConnectToNodeId();
-	if (!RefNodeId.IsValid())
-		return false;
-
-	const HAPI_NodeId RefHAPINodeId = RefNodeId.GetHAPINodeId();
-	int32 InputIndex = 0;
-	for (const FUnrealObjectInputHandle& Handle : RefNode->GetReferencedNodes())
-	{
-		HAPI_NodeId NodeId = -1;
-		if (!GetHAPINodeId(Handle, NodeId))
-			continue;
-
-		// Connect the current input object to the merge node
-		if (FHoudiniApi::ConnectNodeInput(Session, RefHAPINodeId, InputIndex, NodeId, 0) != HAPI_RESULT_SUCCESS)
-		{
-			HOUDINI_LOG_WARNING(TEXT("[FHoudiniEngineUtils::ConnectReferencedNodes] Failed to connected node input: %s"), *FHoudiniEngineUtils::GetErrorDescription());
-			continue;
-		}
-		// HAPI will automatically create a object_merge node, we need to set the xformtype to "Into specified object"
-		HAPI_NodeId ConnectedNodeId = -1;
-		if (FHoudiniApi::QueryNodeInput(Session, RefHAPINodeId, InputIndex, &ConnectedNodeId) != HAPI_RESULT_SUCCESS)
-		{
-			HOUDINI_LOG_WARNING(TEXT("[FHoudiniEngineUtils::ConnectReferencedNodes] Failed to query connected node input: %s"), *FHoudiniEngineUtils::GetErrorDescription());
-			continue;
-
-		}
-		InputIndex++;
-
-		if (ConnectedNodeId < 0)
-		{
-			// No connected was made even though previous functions were successful!?
-			continue;
-		}
-
-		// Set the transform value to "Into Specified Object"
-		// Set the transform object to the world origin null from the manager
-		SetObjectMergeXFormTypeToWorldOrigin(ConnectedNodeId);
-	}
-
-	// Disconnect input indices >= InputIndex
-	HAPI_NodeInfo NodeInfo;
-	FHoudiniApi::NodeInfo_Init(&NodeInfo);
-	if (FHoudiniApi::GetNodeInfo(Session, RefHAPINodeId, &NodeInfo) == HAPI_RESULT_SUCCESS)
-	{
-		while (InputIndex < NodeInfo.inputCount)
-		{
-			// There is currently no way to get the number of _connected_ input nodes or a way to compose a list of the
-			// connected input nodes. So we query the node input at each index until we find an index without a
-			// connection.
-			HAPI_NodeId ConnectedInputNodeId = -1;
-			if (FHoudiniApi::QueryNodeInput(Session, RefHAPINodeId, InputIndex, &ConnectedInputNodeId) != HAPI_RESULT_SUCCESS || ConnectedInputNodeId < 0)
-				break;
-
-			HOUDINI_CHECK_ERROR(FHoudiniApi::DisconnectNodeInput(Session, RefHAPINodeId, InputIndex));
-
-			InputIndex++;
-		}
-	}
-
-	return true;
-}
-
-bool
-FHoudiniEngineUtils::CreateOrUpdateReferenceInputMergeNode(
-	const FUnrealObjectInputIdentifier& InIdentifier,
-	const TSet<FUnrealObjectInputHandle>& InReferencedNodes,
-	FUnrealObjectInputHandle& OutHandle,
-	const bool bInConnectReferencedNodes,
-	const bool& bInputNodesCanBeDeleted)
-{
-	// Identifier must be valid and for a reference node
-	if (!InIdentifier.IsValid() || InIdentifier.GetNodeType() != EUnrealObjectInputNodeType::Reference)
-		return false;
-	
-	FUnrealObjectInputHandle Handle;
-	if (!FindNodeViaManager(InIdentifier, Handle) || !AreHAPINodesValid(Handle))
-	{
-		// Add the node without an node id first
-		// Then get its parent id and create the HAPI node inside the parent's network
-		int32 ObjectNodeId = -1;
-		int32 NodeId = -1;		
-		if (!AddNodeOrUpdateNode(InIdentifier, NodeId, Handle, ObjectNodeId, &InReferencedNodes, bInputNodesCanBeDeleted))
-			return false;
-
-		// Get the parent node id
-		int32 ParentNodeId = -1;
-		FUnrealObjectInputHandle ParentHandle;
-		if (EnsureParentsExist(InIdentifier, ParentHandle, bInputNodesCanBeDeleted))
-			GetHAPINodeId(ParentHandle, ParentNodeId);
-
-		FString NodeName;
-		GetDefaultInputNodeName(InIdentifier, NodeName);
-		// Create the object node
-		if (CreateNode(ParentNodeId, TEXT("geo"), NodeName, true, &ObjectNodeId) != HAPI_RESULT_SUCCESS)
-			return false;
-		// Create the merge node
-		if (CreateNode(ObjectNodeId, TEXT("merge"), NodeName, true, &NodeId) != HAPI_RESULT_SUCCESS)
-			return false;
-		
-		if (!AddNodeOrUpdateNode(InIdentifier, NodeId, Handle, ObjectNodeId, &InReferencedNodes, bInputNodesCanBeDeleted))
-			return false;
-
-		if (bInConnectReferencedNodes)
-		{
-			if (!ConnectReferencedNodesToMerge(InIdentifier))
-				return false;
-		}
-
-		FHoudiniEngineRuntimeUtils::ClearInputNodeDirtyFlag(InIdentifier);
-		
-		OutHandle = Handle;
-		return true;
-	}
-
-	SetReferencedNodes(Handle, InReferencedNodes);
-	if (bInConnectReferencedNodes)
-	{
-		if (!ConnectReferencedNodesToMerge(InIdentifier))
-			return false;
-	}
-
-	FHoudiniEngineRuntimeUtils::ClearInputNodeDirtyFlag(InIdentifier);
-
-	OutHandle = Handle;
-	return true;
-}
-
-bool
-FHoudiniEngineUtils::AddModifierChain(const FUnrealObjectInputIdentifier& InIdentifier, const FName InChainName, const int32 InNodeIdToConnectTo)
-{
-	FUnrealObjectInputHandle Handle;
-	FUnrealObjectInputNode* const Node = GetNodeViaManager(InIdentifier, Handle);
-	if (!Node || !Handle.IsValid())
-		return false;
-	
-	return Node->AddModifierChain(InChainName, InNodeIdToConnectTo);
-}
-
-bool
-FHoudiniEngineUtils::SetModifierChainNodeToConnectTo(const FUnrealObjectInputIdentifier& InIdentifier, const FName InChainName, const int32 InNodeToConnectTo)
-{
-	FUnrealObjectInputHandle Handle;
-	FUnrealObjectInputNode* const Node = GetNodeViaManager(InIdentifier, Handle);
-	if (!Node || !Handle.IsValid())
-		return false;
-	
-	return Node->SetModifierChainNodeToConnectTo(InChainName, InNodeToConnectTo);
-}
-
-bool
-FHoudiniEngineUtils::DoesModifierChainExist(const FUnrealObjectInputIdentifier& InIdentifier, const FName InChainName)
-{
-	FUnrealObjectInputHandle Handle;
-	FUnrealObjectInputNode const* const Node = GetNodeViaManager(InIdentifier, Handle);
-	if (!Node || !Handle.IsValid())
-		return false;
-
-	return Node->GetModifierChain(InChainName) != nullptr; 
-}
-
-HAPI_NodeId
-FHoudiniEngineUtils::GetInputNodeOfModifierChain(const FUnrealObjectInputIdentifier& InIdentifier, const FName InChainName)
-{
-	FUnrealObjectInputHandle Handle;
-	FUnrealObjectInputNode const* const Node = GetNodeViaManager(InIdentifier, Handle);
-	if (!Node || !Handle.IsValid())
-		return INDEX_NONE;
-
-	return Node->GetInputHAPINodeIdOfModifierChain(InChainName);
-}
-
-HAPI_NodeId
-FHoudiniEngineUtils::GetOutputNodeOfModifierChain(const FUnrealObjectInputIdentifier& InIdentifier, const FName InChainName)
-{
-	FUnrealObjectInputHandle Handle;
-	FUnrealObjectInputNode const* const Node = GetNodeViaManager(InIdentifier, Handle);
-	if (!Node || !Handle.IsValid())
-		return INDEX_NONE;
-
-	return Node->GetOutputHAPINodeIdOfModifierChain(InChainName);
-}
-
-bool
-FHoudiniEngineUtils::RemoveModifierChain(const FUnrealObjectInputIdentifier& InIdentifier, const FName InChainName)
-{
-	FUnrealObjectInputHandle Handle;
-	FUnrealObjectInputNode* const Node = GetNodeViaManager(InIdentifier, Handle);
-	if (!Node || !Handle.IsValid())
-		return false;
-
-	return Node->RemoveModifierChain(InChainName);
-}
-
-bool
-FHoudiniEngineUtils::DestroyModifier(const FUnrealObjectInputIdentifier& InIdentifier, const FName InChainName, FUnrealObjectInputModifier* const InModifierToDestroy)
-{
-	FUnrealObjectInputHandle Handle;
-	FUnrealObjectInputNode* const Node = GetNodeViaManager(InIdentifier, Handle);
-	if (!Node || !Handle.IsValid())
-		return false;
-
-	return Node->DestroyModifier(InChainName, InModifierToDestroy);
-}
-
-FUnrealObjectInputModifier*
-FHoudiniEngineUtils::FindFirstModifierOfType(const FUnrealObjectInputIdentifier& InIdentifier, FName InChainName, EUnrealObjectInputModifierType InModifierType)
-{
-	FUnrealObjectInputHandle Handle;
-	FUnrealObjectInputNode const* const Node = GetNodeViaManager(InIdentifier, Handle);
-	if (!Node || !Handle.IsValid())
-		return nullptr;
-
-	return Node->FindFirstModifierOfType(InChainName, InModifierType);
-}
-
-bool
-FHoudiniEngineUtils::UpdateModifiers(const FUnrealObjectInputIdentifier& InIdentifier, const FName InChainName)
-{
-	FUnrealObjectInputHandle Handle;
-	FUnrealObjectInputNode* const Node = GetNodeViaManager(InIdentifier, Handle);
-	if (!Node || !Handle.IsValid())
-		return false;
-
-	return Node->UpdateModifiers(InChainName);
-}
-
-bool
-FHoudiniEngineUtils::UpdateAllModifierChains(const FUnrealObjectInputIdentifier& InIdentifier)
-{
-	FUnrealObjectInputHandle Handle;
-	FUnrealObjectInputNode* const Node = GetNodeViaManager(InIdentifier, Handle);
-	if (!Node || !Handle.IsValid())
-		return false;
-
-	return Node->UpdateAllModifierChains();
 }
 
 #undef LOCTEXT_NAMESPACE

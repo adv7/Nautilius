@@ -1211,6 +1211,7 @@ UHoudiniAssetBlueprintComponent::IsInputTypeSupported(EHoudiniInputType InType) 
 		case EHoudiniInputType::Curve:
 			return true;
 			break;
+
 		default:
 			break;
 	}

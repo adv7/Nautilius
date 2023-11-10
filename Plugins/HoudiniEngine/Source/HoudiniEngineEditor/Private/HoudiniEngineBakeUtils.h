@@ -242,6 +242,7 @@ public:
 		const UHoudiniAssetComponent* HoudiniAssetComponent,
 		int32 InOutputIndex,
 		const TArray<UHoudiniOutput*>& InAllOutputs,
+		const TArray<FHoudiniGeoPartObject>& InHGPOs,
 		// const TArray<FHoudiniBakedOutput>& InAllBakedOutputs,
 		const FHoudiniOutputObjectIdentifier& InOutputObjectIdentifier,
 		const FHoudiniOutputObject& InOutputObject,
@@ -263,6 +264,7 @@ public:
 	static bool BakeInstancerOutputToActors_IAC(
 		const UHoudiniAssetComponent* HoudiniAssetComponent,
 		int32 InOutputIndex,
+		const TArray<FHoudiniGeoPartObject>& InHGPOs,
 		const FHoudiniOutputObjectIdentifier& InOutputObjectIdentifier,
 		const FHoudiniOutputObject& InOutputObject,
 		FHoudiniBakedOutputObject& InBakedOutputObject,
@@ -279,6 +281,7 @@ public:
 		int32 InOutputIndex,
 		const TArray<UHoudiniOutput*>& InAllOutputs,
 		// const TArray<FHoudiniBakedOutput>& InAllBakedOutputs,
+		const TArray<FHoudiniGeoPartObject>& InHGPOs,
 		const FHoudiniOutputObjectIdentifier& InOutputObjectIdentifier,
 		const FHoudiniOutputObject& InOutputObject,
 		FHoudiniBakedOutputObject& InBakedOutputObject,
@@ -300,7 +303,7 @@ public:
 		const UHoudiniAssetComponent* HoudiniAssetComponent,
 		int32 InOutputIndex,
 		const TArray<UHoudiniOutput*>& InAllOutputs,
-		// const TArray<FHoudiniBakedOutput>& InAllBakedOutputs,
+		const TArray<FHoudiniGeoPartObject>& InHGPOs,
 		const FHoudiniOutputObjectIdentifier& InOutputObjectIdentifier,
 		const FHoudiniOutputObject& InOutputObject,
 		FHoudiniBakedOutputObject& InBakedOutputObject,
@@ -453,29 +456,6 @@ public:
 		TArray<EHoudiniInstancerComponentType> const* InInstancerComponentTypesToBake=nullptr,
 		AActor* InFallbackActor=nullptr,
 		const FString& InFallbackWorldOutlinerFolder=TEXT(""));
-
-	static bool BakeInstancerOutputToFoliage(
-		const UHoudiniAssetComponent* HoudiniAssetComponent,
-		int32 InOutputIndex,
-		const TArray<UHoudiniOutput*>& InAllOutputs,
-		// const TArray<FHoudiniBakedOutput>& InAllBakedOutputs,
-		const FHoudiniOutputObjectIdentifier& InOutputObjectIdentifier,
-		const FHoudiniOutputObject& InOutputObject,
-		FHoudiniBakedOutputObject& InBakedOutputObject,
-		const FDirectoryPath& InBakeFolder,
-		const FDirectoryPath& InTempCookFolder,
-		bool bInReplaceAssets,
-		const TArray<FHoudiniEngineBakedActor>& InBakedActors,
-		FHoudiniEngineBakedActor& OutBakedActorEntry,
-		TArray<UPackage*>& OutPackagesToSave,
-		TMap<UStaticMesh*, UFoliageType*> FoliageMap,
-		TMap<UStaticMesh*, UStaticMesh*>& InOutAlreadyBakedStaticMeshMap,
-		TMap<UMaterialInterface *, UMaterialInterface *>& InOutAlreadyBakedMaterialsMap,
-		FHoudiniEngineOutputStats& OutBakeStats);
-
-	static bool CanHoudiniAssetComponentBakeToFoliage(UHoudiniAssetComponent* HoudiniAssetComponent);
-
-	static bool BakeHoudiniActorToFoliage(UHoudiniAssetComponent* HoudiniAssetComponent, bool bInReplaceAssets);
 
 	static bool BakeStaticMeshOutputToActors(
 		const UHoudiniAssetComponent* HoudiniAssetComponent,

@@ -25,18 +25,20 @@
 */
 
 #include "AssetTypeActions_HoudiniAsset.h"
+
 #include "HoudiniAsset.h"
 
 #include "HoudiniEngineEditorPrivatePCH.h"
 #include "HoudiniEngineStyle.h"
 #include "HoudiniEngine.h"
-#include "HoudiniAsset.h"
 #include "HoudiniAssetComponent.h"
-#include "HoudiniTool.h"
 #include "HoudiniEngineEditorUtils.h"
 #include "HoudiniEngineRuntimeUtils.h"
 
 #include "EditorReimportHandler.h"
+#include "HoudiniEngineEditor.h"
+#include "HoudiniToolsEditor.h"
+#include "HoudiniToolTypes.h"
 #include "Framework/MultiBox/MultiBoxBuilder.h"
 #include "HAL/FileManager.h"
 #include "EditorFramework/AssetImportData.h"
@@ -72,26 +74,6 @@ FAssetTypeActions_HoudiniAsset::GetCategories()
 	return EAssetTypeCategories::Misc;
 }
 
-/*
-UThumbnailInfo *
-FAssetTypeActions_HoudiniAsset::GetThumbnailInfo(UObject * Asset) const
-{
-	if (!IsValid(Asset))
-		return nullptr;
-
-	UHoudiniAsset * HoudiniAsset = CastChecked< UHoudiniAsset >(Asset);
-	UThumbnailInfo * ThumbnailInfo = HoudiniAsset->ThumbnailInfo;
-	if (!ThumbnailInfo)
-	{
-		// If we have no thumbnail information, construct it.
-		ThumbnailInfo = NewObject< USceneThumbnailInfo >(HoudiniAsset, USceneThumbnailInfo::StaticClass());
-		HoudiniAsset->ThumbnailInfo = ThumbnailInfo;
-	}
-
-	return ThumbnailInfo;
-}
-*/
-
 bool
 FAssetTypeActions_HoudiniAsset::HasActions(const TArray< UObject * > & InObjects) const
 {
@@ -110,6 +92,20 @@ FAssetTypeActions_HoudiniAsset::GetActions(const TArray<UObject *> & InObjects, 
 	}
 
 	FName StyleSetName = FHoudiniEngineStyle::GetStyleSetName();
+
+	MenuBuilder.AddMenuEntry(
+		NSLOCTEXT("HoudiniPresetTypeActions", "HoudiniPreset_EditToolProperties", "Edit Tool Properties"),
+		NSLOCTEXT(
+			"HoudiniPresetTypeActions", "HoudiniPreset_EditToolProperties_Tooltip",
+			"Edit the HoudiniPreset asset properties."),
+		FSlateIcon(StyleSetName, "HoudiniEngine.HoudiniEngineLogo"),
+		FUIAction(
+			FExecuteAction::CreateStatic(&FAssetTypeActions_HoudiniAsset::ExecuteEditToolProperties, HoudiniAssets),
+			FCanExecuteAction::CreateLambda([=] { return ValidObjects; })
+		)
+	);
+
+	MenuBuilder.AddMenuSeparator();
 
 	MenuBuilder.AddMenuEntry(
 		NSLOCTEXT("HoudiniAssetTypeActions", "HoudiniAsset_Reimport", "Reimport"),
@@ -290,9 +286,11 @@ FAssetTypeActions_HoudiniAsset::ExecuteReimport(TArray<TWeakObjectPtr<UHoudiniAs
 {
 	for (auto ObjIt = InHoudiniAssetPtrs.CreateConstIterator(); ObjIt; ++ObjIt)
 	{
-		UHoudiniAsset * HoudiniAsset = (*ObjIt).Get();
+		UHoudiniAsset* HoudiniAsset = (*ObjIt).Get();
 		if (HoudiniAsset)
+		{
 			FReimportManager::Instance()->Reimport(HoudiniAsset, true);
+		}
 	}
 }
 
@@ -402,6 +400,28 @@ FAssetTypeActions_HoudiniAsset::ExecuteApplyBatch(TArray<TWeakObjectPtr<UHoudini
 	return ExecuteApplyAssetToSelection(InHoudiniAssetPtrs, EHoudiniToolType::HTOOLTYPE_OPERATOR_BATCH);
 }
 
+void FAssetTypeActions_HoudiniAsset::ExecuteEditToolProperties(
+	TArray<TWeakObjectPtr<UHoudiniAsset>> InHoudiniAssetPtrs)
+{
+	for(TWeakObjectPtr<UHoudiniAsset> AssetPtr : InHoudiniAssetPtrs)
+	{
+		if (!AssetPtr.IsValid())
+		{
+			continue;
+		}
+
+		const UHoudiniAsset* HoudiniAsset = AssetPtr.Get();
+		const UHoudiniToolsPackageAsset* ToolsPackage = FHoudiniToolsEditor::FindOwningToolsPackage(HoudiniAsset);
+
+		// Create, and populate, a new FHoudiniTool for this asset which is needed to launch the ToolPropertyEditor.
+		TSharedPtr<FHoudiniTool> HoudiniTool;
+		HoudiniTool = MakeShareable( new FHoudiniTool() );
+		FHoudiniToolsEditor& Tools = FHoudiniEngineEditor::Get().GetHoudiniTools();
+		Tools.PopulateHoudiniTool(HoudiniTool, HoudiniAsset, nullptr, ToolsPackage, false);
+		FHoudiniToolsEditor::LaunchHoudiniToolPropertyEditor(HoudiniTool);
+	}
+}
+
 void
 FAssetTypeActions_HoudiniAsset::ExecuteApplyAssetToSelection(TArray<TWeakObjectPtr<UHoudiniAsset>> InHoudiniAssetPtrs, const EHoudiniToolType& InType)
 {
@@ -460,5 +480,7 @@ FAssetTypeActions_HoudiniAsset::ExecuteInstantiate(TArray<TWeakObjectPtr<UHoudin
 		FHoudiniEngineEditorUtils::InstantiateHoudiniAssetAt(HoudiniAsset, DefaultTransform);
 	}
 }
+
+
 
 #undef LOCTEXT_NAMESPACE

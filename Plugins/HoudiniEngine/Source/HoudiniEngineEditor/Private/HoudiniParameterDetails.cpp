@@ -433,7 +433,7 @@ SCustomizedBox::SetHoudiniParameter(const TArray<TWeakObjectPtr<UHoudiniParamete
 			if (!IsValid(InputParam) || !InputParam->HoudiniInput.IsValid())
 				break;
 
-			UHoudiniInput* Input = InputParam->HoudiniInput.Get();		
+			UHoudiniInput* Input = InputParam->HoudiniInput.Get();
 			if (!IsValid(Input))
 				break;
 
@@ -441,21 +441,6 @@ SCustomizedBox::SetHoudiniParameter(const TArray<TWeakObjectPtr<UHoudiniParamete
 			{
 				switch (Input->GetInputType())
 				{
-					case EHoudiniInputType::Geometry:
-					{
-						int32 ExpandedTransformUIs = 0;
-						for (int32 Idx = 0; Idx < Input->GetNumberOfInputObjects(); ++Idx)
-						{
-							if (Input->IsTransformUIExpanded(Idx))
-								ExpandedTransformUIs += 1;
-						}
-
-						MarginHeight = HOUDINI_PARAMETER_UI_ROW_MARGIN_HEIGHT_INPUT_GEOMETRY_MULTIPARMHEADER
-							+ Input->GetNumberOfInputObjects() * HOUDINI_PARAMETER_UI_ROW_MARGIN_HEIGHT_INPUT_GEOMETRY_INSTANCE_MULTIPARMHEADER
-							+ ExpandedTransformUIs * HOUDINI_PARAMETER_UI_ROW_MARGIN_HEIGHT_INPUT_GEOMETRY_INSTANCE_TRANSFORM_MULTIPARMHEADER;
-					}
-					break;
-
 					case EHoudiniInputType::Curve:
 					{
 						MarginHeight = HOUDINI_PARAMETER_UI_ROW_MARGIN_HEIGHT_INPUT_CURVE_MULTIPARMHEADER
@@ -463,39 +448,8 @@ SCustomizedBox::SetHoudiniParameter(const TArray<TWeakObjectPtr<UHoudiniParamete
 					}
 					break;
 
-					case EHoudiniInputType::Asset:
-					{
-						MarginHeight = HOUDINI_PARAMETER_UI_ROW_MARGIN_HEIGHT_INPUT_ASSET_MULTIPARMHEADER;
-					}
-					break;
-
-					case EHoudiniInputType::Landscape:
-					{
-						if (Input->GetLandscapeExportType() == EHoudiniLandscapeExportType::Heightfield)
-							MarginHeight = HOUDINI_PARAMETER_UI_ROW_MARGIN_HEIGHT_INPUT_LANDSCAPE_MULTIPARMHEADER;
-						else
-							MarginHeight = HOUDINI_PARAMETER_UI_ROW_MARGIN_HEIGHT_INPUT_LANDSCAPE_MESH_MULTIPARMHEADER;
-					}
-					break;
-
+					case EHoudiniInputType::Geometry:
 					case EHoudiniInputType::World:
-					{
-						MarginHeight = HOUDINI_PARAMETER_UI_ROW_MARGIN_HEIGHT_INPUT_WORLD_MULTIPARMHEADER;
-					}
-					break;
-
-					case EHoudiniInputType::Skeletal:
-					{
-						MarginHeight = HOUDINI_PARAMETER_UI_ROW_MARGIN_HEIGHT_INPUT_SKELETAL_MULTIPARMHEADER;
-					}
-					break;
-
-					case EHoudiniInputType::GeometryCollection:
-					{
-						MarginHeight = HOUDINI_PARAMETER_UI_ROW_MARGIN_HEIGHT_INPUT_GEOMETRYCOLLECTION_MULTIPARMHEADER;
-					}
-					break;
-
 					default:
 						MarginHeight = HOUDINI_PARAMETER_UI_ROW_MARGIN_HEIGHT_INPUT_MULTIPARMHEADER;
 						break;
@@ -505,21 +459,6 @@ SCustomizedBox::SetHoudiniParameter(const TArray<TWeakObjectPtr<UHoudiniParamete
 			{
 				switch (Input->GetInputType())
 				{
-					case EHoudiniInputType::Geometry:
-					{
-						int32 ExpandedTransformUIs = 0;
-						for (int32 Idx = 0; Idx < Input->GetNumberOfInputObjects(); ++Idx)
-						{
-							if (Input->IsTransformUIExpanded(Idx))
-								ExpandedTransformUIs += 1;
-						}
-
-						MarginHeight = HOUDINI_PARAMETER_UI_ROW_MARGIN_HEIGHT_INPUT_GEOMETRY
-							+ Input->GetNumberOfInputObjects() * HOUDINI_PARAMETER_UI_ROW_MARGIN_HEIGHT_INPUT_GEOMETRY_INSTANCE
-							+ ExpandedTransformUIs * HOUDINI_PARAMETER_UI_ROW_MARGIN_HEIGHT_INPUT_GEOMETRY_INSTANCE_TRANSFORM;
-					}
-					break;
-
 					case EHoudiniInputType::Curve:
 					{
 						MarginHeight = HOUDINI_PARAMETER_UI_ROW_MARGIN_HEIGHT_INPUT_CURVE
@@ -527,39 +466,8 @@ SCustomizedBox::SetHoudiniParameter(const TArray<TWeakObjectPtr<UHoudiniParamete
 					}
 					break;
 
-					case EHoudiniInputType::Asset:
-					{
-						MarginHeight = HOUDINI_PARAMETER_UI_ROW_MARGIN_HEIGHT_INPUT_ASSET;
-					}
-					break;
-
-					case EHoudiniInputType::Landscape:
-					{
-						if (Input->GetLandscapeExportType() == EHoudiniLandscapeExportType::Heightfield)
-							MarginHeight = HOUDINI_PARAMETER_UI_ROW_MARGIN_HEIGHT_INPUT_LANDSCAPE;
-						else
-							MarginHeight = HOUDINI_PARAMETER_UI_ROW_MARGIN_HEIGHT_INPUT_LANDSCAPE_MESH;
-					}
-					break;
-
+					case EHoudiniInputType::Geometry:
 					case EHoudiniInputType::World:
-					{
-						MarginHeight = HOUDINI_PARAMETER_UI_ROW_MARGIN_HEIGHT_INPUT_WORLD;
-					}
-					break;
-
-					case EHoudiniInputType::Skeletal:
-					{
-						MarginHeight = HOUDINI_PARAMETER_UI_ROW_MARGIN_HEIGHT_INPUT_SKELETAL;
-					}
-					break;
-
-					case EHoudiniInputType::GeometryCollection:
-					{
-						MarginHeight = HOUDINI_PARAMETER_UI_ROW_MARGIN_HEIGHT_INPUT_GEOMETRYCOLLECTION;
-					}
-					break;
-
 					default:
 						MarginHeight = HOUDINI_PARAMETER_UI_ROW_MARGIN_HEIGHT_INPUT;
 						break;
@@ -7098,7 +7006,7 @@ FHoudiniParameterDetails:: ReplaceFloatRampParameterPointsWithMainParameter(UHou
 		int32 PointIdx = 0;
 		while (MainPoints.IsValidIndex(PointIdx) && Points.IsValidIndex(PointIdx))
 		{
-			UHoudiniParameterRampFloatPoint*& MainPoint = MainPoints[PointIdx];
+			UHoudiniParameterRampFloatPoint*& MainPoint = MainPoints[PointIdx];	
 			UHoudiniParameterRampFloatPoint*& Point = Points[PointIdx];
 
 			if (!MainPoint || !Point)

@@ -69,17 +69,9 @@ class FHoudiniInputDetails : public TSharedFromThis<FHoudiniInputDetails, ESPMod
 			TSharedRef<SVerticalBox> InVerticalBox,
 			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
 
-		static void AddCurveInputCookOnChangeCheckBox(
-				TSharedRef< SVerticalBox > VerticalBox,
-				const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
-
 		// Checkbox : Pack before merging
 		static void AddPackBeforeMergeCheckbox(
 			TSharedRef<SVerticalBox> InVerticalBox,
-			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
-
-		static void AddImportAsReferenceCheckboxes(
-			TSharedRef< SVerticalBox > VerticalBox,
 			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
 
 		// Checkboxes : Export LODs / Sockets / Collisions
@@ -87,7 +79,38 @@ class FHoudiniInputDetails : public TSharedFromThis<FHoudiniInputDetails, ESPMod
 			TSharedRef<SVerticalBox> InVerticalBox,
 			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
 
+		static void AddCurveRotScaleAttributesCheckBox(
+			TSharedRef<SVerticalBox> InVerticalBox,
+			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
+
+		static void AddCurveAutoUpdateCheckBox(
+			TSharedRef<SVerticalBox> InVerticalBox,
+			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
+
+		// Export options: common checkboxes for the new
+		// Geometry and new World inputs
+		static void AddExportAsReferenceCheckBoxes(
+			TSharedRef<SVerticalBox> InVerticalBox,
+			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
+
+		// Landscape Options
+		static void AddExportSelectedLandscapesOnlyCheckBox(
+			TSharedRef<SVerticalBox> InVerticalBox,
+			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
+
+		static void AddExportLandscapeAsOptions(
+			TSharedRef<SVerticalBox> InVerticalBox,
+			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
+
 		static void AddLandscapeAutoSelectSplinesCheckBox(
+			TSharedRef<SVerticalBox> InVerticalBox,
+			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
+
+		static void AddExportOptions(
+			TSharedRef<SVerticalBox> InVerticalBox,
+			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
+
+		static void AddLandscapeOptions(
 			TSharedRef<SVerticalBox> InVerticalBox,
 			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
 
@@ -95,81 +118,75 @@ class FHoudiniInputDetails : public TSharedFromThis<FHoudiniInputDetails, ESPMod
 			TSharedRef<SVerticalBox> InVerticalBox,
 			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
 
-		// Add Geometry Inputs UI Widgets
-		static void AddGeometryInputUI(
-			IDetailCategoryBuilder& CategoryBuilder,
+		static void AddDirectlyConnectHdasCheckBox(
 			TSharedRef<SVerticalBox> InVerticalBox,
-			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs, 
-			TSharedPtr<FAssetThumbnailPool> AssetThumbnailPool);
+			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
 
-		// Create a single geometry widget for the given input object
-		static void Helper_CreateGeometryWidget(
-			IDetailCategoryBuilder& CategoryBuilder,
-			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs,
-			const FPlatformTypes::int32& InGeometryObjectIdx,
-			TSharedPtr<FAssetThumbnailPool> AssetThumbnailPool, TSharedRef<SVerticalBox> VerticalBox);
+		static void AddUnrealSplineResolutionInput(
+			TSharedRef<SVerticalBox> InVerticalBox,
+			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
 
-		static void Helper_CreateGeometryCollectionWidget(
-			IDetailCategoryBuilder& CategoryBuilder,
-			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs,
-			const FPlatformTypes::int32& InGeometryCollectionObjectIdx,
-			TSharedPtr<FAssetThumbnailPool> AssetThumbnailPool, TSharedRef<SVerticalBox> VerticalBox);
+		static void AddUseLegacyInputCurvesCheckBox(
+			TSharedRef<SVerticalBox> InVerticalBox,
+			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
 
-		static void Helper_CreateCurveWidget(
+		static void Helper_CreateCurveWidgetExpanded(
 			IDetailCategoryBuilder& CategoryBuilder,
 			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs,
 			const int32& InCurveObjectIdx,
-			TSharedPtr< FAssetThumbnailPool > AssetThumbnailPool,
-			TSharedRef< SVerticalBox > VerticalBox,
+			TSharedPtr<FAssetThumbnailPool> AssetThumbnailPool,
+			TSharedRef<SVerticalBox> InVerticalBox,
 			TSharedPtr<class FHoudiniSplineComponentVisualizer> HouSplineComponentVisualizer);
 
-		// Add Asset Inputs UI Widgets
-		static void AddAssetInputUI(
-			TSharedRef<SVerticalBox> VerticalBox,
-			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
+		static void Helper_CreateCurveWidgetCollapsed(
+			IDetailCategoryBuilder& CategoryBuilder,
+			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs,
+			const int32& InCurveObjectIdx,
+			TSharedPtr<FAssetThumbnailPool> AssetThumbnailPool,
+			TSharedRef<SVerticalBox> InVerticalBox,
+			TSharedPtr<class FHoudiniSplineComponentVisualizer> HouSplineComponentVisualizer);
+
+		static void Helper_AddCurvePointSelectionUI(
+			IDetailCategoryBuilder& CategoryBuilder,
+			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs,
+			TSharedPtr<FAssetThumbnailPool> AssetThumbnailPool,
+			TSharedRef<SVerticalBox> InVerticalBox,
+			TSharedPtr<class FHoudiniSplineComponentVisualizer> HouSplineComponentVisualizer);
 
 		// Add Curve Inputs UI Widgets
 		static void AddCurveInputUI(
 			IDetailCategoryBuilder& CategoryBuilder,
-			TSharedRef<SVerticalBox> VerticalBox,
+			TSharedRef<SVerticalBox> InVerticalBox,
 			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs,
 			TSharedPtr<FAssetThumbnailPool> AssetThumbnailPool);
 
-		// Add Landscape Inputs UI Widgets
-		static void AddLandscapeInputUI(
-			TSharedRef<SVerticalBox> VerticalBox,
-			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
+		// Add new Geometry UI widget
+		static void AddGeometryInputUI(
+			IDetailCategoryBuilder& CategoryBuilder,
+			TSharedRef<SVerticalBox> InVerticalBox,
+			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs,
+			TSharedPtr<FAssetThumbnailPool> AssetThumbnailPool);
 
-		// Add World Inputs UI Widgets
+		// Add new World UI widget
 		static void AddWorldInputUI(
 			IDetailCategoryBuilder& CategoryBuilder,
-			TSharedRef<SVerticalBox> VerticalBox,
+			TSharedRef<SVerticalBox> InVerticalBox,
 			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs,
-			const IDetailsView* InDetailsView);
-
-		// Add Skeletal Inputs UI Widgets
-		static void AddSkeletalInputUI(
-			TSharedRef<SVerticalBox> VerticalBox,
-			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs,
-			TSharedPtr<FAssetThumbnailPool> AssetThumbnailPool);
-
-		// Add GeometryCollection Inputs UI Widgets
-		static void AddGeometryCollectionInputUI(
+			const IDetailsView* DetailsView);
+		
+		static void Helper_CreateGeometryInputObjectCollapsed(
 			IDetailCategoryBuilder& CategoryBuilder,
-			TSharedRef<SVerticalBox> VerticalBox,
 			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs,
+			const FPlatformTypes::int32& InObjectIdx,
+			TSharedRef<SVerticalBox> InVerticalBox,
 			TSharedPtr<FAssetThumbnailPool> AssetThumbnailPool);
-	
-		/*
-		static FMenuBuilder Helper_CreateCustomActorPickerWidget(
-			UHoudiniInput* InParam,
-			const TAttribute<FText>& HeadingText,
-			const bool& bShowCurrentSelectionSection)
-			*/
 
-		static FMenuBuilder Helper_CreateHoudiniAssetPickerWidget(const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
-
-		static FMenuBuilder Helper_CreateLandscapePickerWidget(const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
+		static void Helper_CreateGeometryInputObjectExpanded(
+			IDetailCategoryBuilder& CategoryBuilder,
+			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs,
+			const FPlatformTypes::int32& InObjectIdx,
+			TSharedRef<SVerticalBox> InVerticalBox,
+			TSharedPtr<FAssetThumbnailPool> AssetThumbnailPool);
 
 		static FMenuBuilder Helper_CreateWorldActorPickerWidget(const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
 

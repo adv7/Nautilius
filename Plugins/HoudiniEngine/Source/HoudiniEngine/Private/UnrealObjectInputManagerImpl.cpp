@@ -32,6 +32,7 @@
 #include "HoudiniEngine.h"
 #include "HoudiniEngineUtils.h"
 #include "UnrealObjectInputRuntimeTypes.h"
+#include "UnrealObjectInputUtils.h"
 
 FUnrealObjectInputManagerImpl::FUnrealObjectInputManagerImpl()
 	: WorldOriginNodeId()
@@ -393,7 +394,7 @@ FUnrealObjectInputManagerImpl::EnsureParentsExist(
 	{
 		// Make sure we prevent node destruction if needed
 		if (!bInputNodesCanBeDeleted)
-			FHoudiniEngineUtils::UpdateInputNodeCanBeDeleted(ParentHandle, bInputNodesCanBeDeleted);
+			FUnrealObjectInputUtils::UpdateInputNodeCanBeDeleted(ParentHandle, bInputNodesCanBeDeleted);
 
 		OutParentHandle = ParentHandle;
 		return true;
@@ -445,9 +446,9 @@ FUnrealObjectInputManagerImpl::EnsureParentsExist(
 
 	// Make sure we prevent node destruction if needed
 	if (!bInputNodesCanBeDeleted)
-		FHoudiniEngineUtils::UpdateInputNodeCanBeDeleted(ParentHandle, bInputNodesCanBeDeleted);
+		FUnrealObjectInputUtils::UpdateInputNodeCanBeDeleted(ParentHandle, bInputNodesCanBeDeleted);
 	else
-		FHoudiniEngineUtils::UpdateInputNodeCanBeDeleted(ParentHandle, bInputNodesCanBeDeleted);
+		FUnrealObjectInputUtils::UpdateInputNodeCanBeDeleted(ParentHandle, bInputNodesCanBeDeleted);
 	
 	OutParentHandle = ParentHandle;
 
@@ -648,6 +649,8 @@ FUnrealObjectInputManagerImpl::GetDefaultNodeName(const FUnrealObjectInputIdenti
 			NameParts.Add(TEXT("lods"));
 		if (Options.bExportSockets)
 			NameParts.Add(TEXT("sockets"));
+		if (Options.bMainMeshIsNaniteFallbackMesh)
+			NameParts.Add(TEXT("nanite_fallback"));
 		if (Options.bImportAsReference)
 			NameParts.Add(TEXT("reference"));
 		if (Options.bImportAsReferenceRotScaleEnabled)

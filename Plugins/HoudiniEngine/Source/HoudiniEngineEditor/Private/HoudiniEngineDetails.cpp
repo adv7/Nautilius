@@ -75,7 +75,13 @@
 #include "HAL/FileManager.h"
 #include "HAL/PlatformApplicationMisc.h"
 #include "ActorTreeItem.h"
+#include "AssetSelection.h"
 #include "HoudiniLandscapeTranslator.h"
+#include "HoudiniPresetFactory.h"
+#include "HoudiniToolsEditor.h"
+#include "SHoudiniPresets.h"
+#include "ToolMenuEntry.h"
+#include "Widgets/Images/SLayeredImage.h"
 
 #define LOCTEXT_NAMESPACE HOUDINI_LOCTEXT_NAMESPACE
 
@@ -127,22 +133,25 @@ FHoudiniEngineDetails::CreateWidget(
 	if (!IsValidWeakPointer(MainHAC))
 		return;
 
-	// 0. Houdini Engine Icon
+	// Houdini Engine Icon
 	FHoudiniEngineDetails::CreateHoudiniEngineIconWidget(HoudiniEngineCategoryBuilder, InHACs);
+
+	// Widget for HoudiniAsset related actions. Currently only contains things for Presets.
+	FHoudiniEngineDetails::CreateHoudiniEngineActionWidget(HoudiniEngineCategoryBuilder, InHACs);
 	
-	// 1. Houdini Engine Session Status
+	// Houdini Engine Session Status
 	FHoudiniAssetComponentDetails::AddSessionStatusRow(HoudiniEngineCategoryBuilder);
 	
-	// 2. Create Generate Category
+	// Create Generate Category
 	FHoudiniEngineDetails::CreateGenerateWidgets(HoudiniEngineCategoryBuilder, InHACs);
 	
-	// 3. Create Bake Category
+	// Create Bake Category
 	FHoudiniEngineDetails::CreateBakeWidgets(HoudiniEngineCategoryBuilder, InHACs);
 	
-	// 4. Create Asset Options Category
+	// Create Asset Options Category
 	FHoudiniEngineDetails::CreateAssetOptionsWidgets(HoudiniEngineCategoryBuilder, InHACs);
 
-	// 5. Create Help and Debug Category
+	// Create Help and Debug Category
 	FHoudiniEngineDetails::CreateHelpAndDebugWidgets(HoudiniEngineCategoryBuilder, InHACs);
 }
 
@@ -155,6 +164,7 @@ FHoudiniEngineDetails::CreateHoudiniEngineIconWidget(
 		return;
 
 	const TWeakObjectPtr<UHoudiniAssetComponent>& MainHAC = InHACs[0];
+	IDetailLayoutBuilder* SavedLayoutBuilder = &HoudiniEngineCategoryBuilder.GetParentLayout();
 
 	if (!IsValidWeakPointer(MainHAC))
 		return;
@@ -167,6 +177,10 @@ FHoudiniEngineDetails::CreateHoudiniEngineIconWidget(
 	FDetailWidgetRow & Row = HoudiniEngineCategoryBuilder.AddCustomRow(FText::GetEmpty());
 	TSharedRef<SHorizontalBox> Box = SNew(SHorizontalBox);
 	TSharedPtr<SImage> Image;
+
+	TSharedPtr<SLayeredImage> OptionsImage = SNew(SLayeredImage)
+		 .Image(FAppStyle::Get().GetBrush("DetailsView.ViewOptions"))
+		 .ColorAndOpacity(FSlateColor::UseForeground());
 	
 	Box->AddSlot()
 	.AutoWidth()
@@ -174,6 +188,7 @@ FHoudiniEngineDetails::CreateHoudiniEngineIconWidget(
 	.HAlign(HAlign_Left)
 	[
 		SNew(SBox)
+		.IsEnabled(false)
 		.HeightOverride(30)
 		.WidthOverride(208)
 		[
@@ -181,7 +196,7 @@ FHoudiniEngineDetails::CreateHoudiniEngineIconWidget(
 			.ColorAndOpacity(FSlateColor::UseForeground())
 		]
 	];
-	
+
 	Image->SetImage(
 		TAttribute<const FSlateBrush*>::Create(
 			TAttribute<const FSlateBrush*>::FGetter::CreateLambda([HoudiniEngineUIIconBrush]() {
@@ -191,6 +206,57 @@ FHoudiniEngineDetails::CreateHoudiniEngineIconWidget(
 	Row.WholeRowWidget.Widget = Box;
 	Row.IsEnabled(false);
 }
+
+
+void
+FHoudiniEngineDetails::CreateHoudiniEngineActionWidget(IDetailCategoryBuilder& HoudiniEngineCategoryBuilder,
+	const TArray<TWeakObjectPtr<UHoudiniAssetComponent>>& InHACs)
+{
+	if (InHACs.Num() <= 0)
+		return;
+
+	const TWeakObjectPtr<UHoudiniAssetComponent>& MainHAC = InHACs[0];
+	IDetailLayoutBuilder* SavedLayoutBuilder = &HoudiniEngineCategoryBuilder.GetParentLayout();
+
+	if (!IsValidWeakPointer(MainHAC))
+		return;
+
+	// Skip drawing the icon if the icon image is not loaded correctly.
+	TSharedPtr<FSlateDynamicImageBrush> HoudiniEngineUIIconBrush = FHoudiniEngineEditor::Get().GetHoudiniEngineUIIconBrush();
+	if (!HoudiniEngineUIIconBrush.IsValid())
+		return;
+
+	FDetailWidgetRow & Row = HoudiniEngineCategoryBuilder.AddCustomRow(FText::GetEmpty());
+	TSharedRef<SHorizontalBox> Box = SNew(SHorizontalBox);
+	TSharedPtr<SImage> Image;
+
+	TSharedPtr<SLayeredImage> OptionsImage = SNew(SLayeredImage)
+		 .Image(FAppStyle::Get().GetBrush("DetailsView.ViewOptions"))
+		 .ColorAndOpacity(FSlateColor::UseForeground());
+	
+	Box->AddSlot()
+	.FillWidth(1.0f)
+	.HAlign(HAlign_Right)
+	[
+		SNew(SComboButton)
+		.HasDownArrow(false)
+		.ContentPadding(0)
+		.ForegroundColor( FSlateColor::UseForeground() )
+		.ButtonStyle( FAppStyle::Get(), "SimpleButton" )
+		.AddMetaData<FTagMetaData>(FTagMetaData(TEXT("ViewOptions")))
+		.OnGetMenuContent_Lambda([InHACs, SavedLayoutBuilder]() -> TSharedRef<SWidget>
+		{
+			return ConstructActionMenu(InHACs, SavedLayoutBuilder).ToSharedRef();
+		})
+		.ButtonContent()
+		[
+			OptionsImage.ToSharedRef()
+		]
+	];
+
+	Row.WholeRowWidget.Widget = Box;
+}
+
 
 void 
 FHoudiniEngineDetails::CreateGenerateWidgets(
@@ -564,31 +630,6 @@ FHoudiniEngineDetails::CreateGenerateWidgets(
 	TempCookFolderRow.WholeRowWidget.Widget = TempCookFolderRowHorizontalBox;
 }
 
-void
-FHoudiniEngineDetails::OnBakeAfterCookChangedHelper(bool bInState, UHoudiniAssetComponent* InHAC)
-{
-	if (!IsValid(InHAC))
-		return;
-	
-	if (!bInState)
-	{
-		if (InHAC->GetOnPostCookBakeDelegate().IsBound())
-			InHAC->GetOnPostCookBakeDelegate().Unbind();
-	}
-	else
-	{
-		InHAC->GetOnPostCookBakeDelegate().BindLambda([](UHoudiniAssetComponent* HAC)
-		{
-			return FHoudiniEngineBakeUtils::BakeHoudiniAssetComponent(
-				HAC,
-				HAC->bReplacePreviousBake,
-				HAC->HoudiniEngineBakeOption,
-				HAC->bRemoveOutputAfterBake,
-				HAC->bRecenterBakedActors);
-		});
-	}	
-}
-
 void 
 FHoudiniEngineDetails::CreateBakeWidgets(
 	IDetailCategoryBuilder& HoudiniEngineCategoryBuilder,
@@ -726,11 +767,7 @@ FHoudiniEngineDetails::CreateBakeWidgets(
 	TSharedPtr<SComboBox<TSharedPtr<FString>>> TypeComboBox;
 
 	TArray<TSharedPtr<FString>>* OptionSource = FHoudiniEngineEditor::Get().GetHoudiniEngineBakeTypeOptionsLabels();
-	TSharedPtr<FString> IntialSelec;
-	if (OptionSource) 
-	{
-		IntialSelec = (*OptionSource)[(int)MainHAC->HoudiniEngineBakeOption];
-	}
+	TSharedPtr<FString> IntialSelec = MakeShareable(new FString(FHoudiniEngineEditor::Get().GetStringFromHoudiniEngineBakeOption(MainHAC->HoudiniEngineBakeOption)));
 
 	ButtonRowHorizontalBox->AddSlot()
 	/*.AutoWidth()*/
@@ -913,26 +950,6 @@ FHoudiniEngineDetails::CreateBakeWidgets(
         ]
     ];
 
-	// TODO: find a better way to manage the initial binding/unbinding of the post cook bake delegate
-	// We do this here to ensure the delegate is bound/unbound correctly when the UI is initially drawn
-	// Currently we have the problem that the HoudiniEngineRuntime and HoudiniEngine modules cannot access
-	// the FHoudiniEngineBakeUtils code that is in HoudiniEngineEditor (this is the primary reason for the delegate and
-	// managing the delegate in this way).
-	for (auto & NextHAC : InHACs) 
-	{
-		if (!IsValidWeakPointer(NextHAC))
-			continue;
-
-		const bool bState = NextHAC->IsBakeAfterNextCookEnabled();
-
-		if (NextHAC->IsBakeAfterNextCookEnabled() == bState) 
-			continue;
-
-		NextHAC->SetBakeAfterNextCookEnabled(bState);
-		NextHAC->MarkPackageDirty();
-		OnBakeAfterCookChangedHelper(bState, NextHAC.Get());
-	}	
-	
 	RightColumnVerticalBox->AddSlot()
     .AutoHeight()
     .Padding(0.0f, 0.0f, 0.0f, 3.5f)
@@ -966,9 +983,8 @@ FHoudiniEngineDetails::CreateBakeWidgets(
 					if (NextHAC->IsBakeAfterNextCookEnabled() == bNewState)
 						continue;
 
-                    NextHAC->SetBakeAfterNextCookEnabled(bNewState);
+                    NextHAC->SetBakeAfterNextCook(bNewState ? EHoudiniBakeAfterNextCook::Always : EHoudiniBakeAfterNextCook::Disabled);
 					NextHAC->MarkPackageDirty();
-                    OnBakeAfterCookChangedHelper(bNewState, NextHAC.Get());
                 }
 
                 // FHoudiniEngineUtils::UpdateEditorProperties(MainHAC, true);
@@ -1096,52 +1112,7 @@ FHoudiniEngineDetails::CreateBakeWidgets(
 					"Bake this Houdini Asset Actor to a blueprint."));
 			}
 		break;
-
-		case EHoudiniEngineBakeOption::ToFoliage_DEPRECATED:
-		{
-			if (!FHoudiniEngineBakeUtils::CanHoudiniAssetComponentBakeToFoliage(MainHAC.Get()))
-			{
-				// If the HAC does not have instanced output, disable Bake to Foliage
-				BakeButton->SetEnabled(false);
-				BakeButton->SetToolTipText(LOCTEXT("HoudiniEngineBakeButtonNoInstancedOutputToolTip",
-					"The Houdini Asset must be outputing at least one instancer in order to be able to bake to Foliage."));
-			}
-			else 
-			{
-				if (MainHAC->bReplacePreviousBake)
-				{
-					BakeButton->SetToolTipText(LOCTEXT("HoudiniEngineBakeButtonBakeWithReplaceToFoliageToolTip",
-						"DEPCRECATED: Add this Houdini Asset Actor's instancers to the current level's Foliage, replacing the previously baked foliage instancers from this actor."));
-				}
-				else
-				{
-					BakeButton->SetToolTipText(LOCTEXT("HoudiniEngineBakeButtonBakeToFoliageToolTip",
-						"DEPCRECATED: Add this Houdini Asset Actor's instancers to the current level's Foliage."));
-				}
-			}
-		}
-		break;
-
-		case EHoudiniEngineBakeOption::ToWorldOutliner:
-		{
-			if (MainHAC->bReplacePreviousBake)
-			{
-				BakeButton->SetToolTipText(LOCTEXT("HoudiniEngineBakeButtonBakeWithReplaceToWorldOutlinerToolTip",
-					"Not implemented."));
-			}
-			else
-			{
-				BakeButton->SetToolTipText(LOCTEXT("HoudiniEngineBakeButtonBakeToWorldOutlinerToolTip",
-					"Not implemented."));
-			}
-		}
-		break;
 	}
-
-	// Todo: remove me!
-	if (MainHAC->HoudiniEngineBakeOption == EHoudiniEngineBakeOption::ToWorldOutliner)
-		BakeButton->SetEnabled(false);
-
 }
 
 void 
@@ -1276,8 +1247,10 @@ FHoudiniEngineDetails::CreateAssetOptionsWidgets(
 			if (!IsValidWeakPointer(NextHAC))
 				continue;
 
-			NextHAC->bLandscapeUseTempLayers = bChecked;
+			if (NextHAC->bLandscapeUseTempLayers == bChecked)
+				continue;
 
+			NextHAC->bLandscapeUseTempLayers = bChecked;
 			NextHAC->MarkPackageDirty();
 		}
 	};
@@ -2157,6 +2130,171 @@ FHoudiniEngineDetails::GetHoudiniAssetThumbnailBorder(TSharedPtr< SBorder > Houd
 		return _GetEditorStyle().GetBrush("PropertyEditor.AssetThumbnailLight");
 	else
 		return _GetEditorStyle().GetBrush("PropertyEditor.AssetThumbnailShadow");
+}
+
+TSharedPtr<SWidget>
+FHoudiniEngineDetails::ConstructActionMenu(const TArray<TWeakObjectPtr<UHoudiniAssetComponent>>& InHACs, class IDetailLayoutBuilder* LayoutBuilder)
+{
+	FMenuBuilder MenuBuilder( true, NULL );
+
+	const int32 NumHACs = InHACs.Num(); 
+
+	if (NumHACs == 0)
+	{
+		return MenuBuilder.MakeWidget();
+	}
+
+	TWeakObjectPtr<UHoudiniAssetComponent> HAC = InHACs[0];
+
+	if (!HAC.IsValid())
+	{
+		return MenuBuilder.MakeWidget();
+	}
+
+	MenuBuilder.BeginSection("AssetCreate", LOCTEXT("HDAActionMenu_SectionCreate", "Create"));
+
+	// Create Preset
+	MenuBuilder.AddMenuEntry(
+		FText::FromString("Create Preset"),
+		FText::FromString("Create a new preset from the current HoudiniAssetComponent parameters."),
+		FSlateIcon(),
+		FUIAction(
+			FExecuteAction::CreateLambda([HAC]() -> void
+			{
+				SHoudiniCreatePresetFromHDA::CreateDialog(HAC);
+			}),
+			FCanExecuteAction()
+		)
+	);
+
+	MenuBuilder.EndSection();
+
+	MenuBuilder.BeginSection("Modify", LOCTEXT("HDAActionMenu_SectionModify", "Modify"));
+
+	// Update Selected Preset (if a preset asset is selected)
+	MenuBuilder.AddMenuEntry(
+		FText::FromString("Update Selected Preset"),
+		FText::FromString("Update the Houdini Preset that is currently selected in the content browser."),
+		FSlateIcon(),
+		FUIAction(
+			FExecuteAction::CreateLambda([HAC]() -> void
+			{
+				SHoudiniUpdatePresetFromHDA::CreateDialog(HAC);
+			}),
+			FCanExecuteAction::CreateLambda([NumHACs]() -> bool
+			{
+				if (NumHACs != 1)
+				{
+					return false;
+				}
+				
+				TArray<FAssetData> SelectedAssets; 
+				AssetSelectionUtils::GetSelectedAssets(SelectedAssets);
+				if (SelectedAssets.Num() != 1)
+				{
+					return false;
+				}
+
+				const FAssetData& AssetData = SelectedAssets[0];
+				const UHoudiniPreset* SelectedPreset = Cast<UHoudiniPreset>(AssetData.GetAsset());
+				return IsValid(SelectedPreset);
+			})
+		)
+	);
+	
+	MenuBuilder.EndSection();
+
+	TArray<UHoudiniPreset*> Presets;
+	FHoudiniToolsEditor::FindPresetsForHoudiniAsset(HAC->GetHoudiniAsset(), Presets);
+
+	Algo::Sort(Presets, [](const UHoudiniPreset* LHS, const UHoudiniPreset* RHS) { return LHS->Name < RHS->Name; });
+
+	TSharedPtr<SImage> SearchImage = SNew(SImage)
+		 .Image(FAppStyle::Get().GetBrush("Symbols.SearchGlass"))
+		 .ColorAndOpacity(FSlateColor::UseForeground());
+
+	// Presets
+	// TODO: store presets in a searchable submenu
+	MenuBuilder.BeginSection("Presets", LOCTEXT("HDAActionMenu_SectionPresets", "Presets"));
+	for (UHoudiniPreset* Preset : Presets)
+	{
+		if (!IsValid(Preset))
+		{
+			continue;
+		}
+
+		if (Preset->bHidePreset)
+		{
+			continue;
+		}
+
+		TSharedRef<SHorizontalBox> PresetItem =
+			SNew(SHorizontalBox)
+
+			// Preset Name 
+			+ SHorizontalBox::Slot()
+			.AutoWidth()
+			.VAlign(VAlign_Center)
+			[
+				SNew(STextBlock)
+				.Text( FText::FromString(Preset->Name) )
+			]
+
+			// Browse to HoudiniPreset button
+			+ SHorizontalBox::Slot()
+			.FillWidth(1.0f)
+			.HAlign(HAlign_Right)
+			[
+				SNew(SButton)
+				.ContentPadding(0)
+				.ForegroundColor( FSlateColor::UseForeground() )
+				.ButtonStyle( FAppStyle::Get(), "SimpleButton" )
+				.ToolTipText( LOCTEXT("HDAActionMenu_SectionPresets_FindInCB", "Find in Content Browser") )
+				.OnClicked_Lambda([Preset]() -> FReply
+				{
+					FHoudiniToolsEditor::BrowseToObjectInContentBrowser(Preset);
+					return FReply::Handled();
+				})
+				.Content()
+				[
+					SearchImage.ToSharedRef()
+				]
+			];
+		
+		// Menu entry for preset
+		MenuBuilder.AddMenuEntry(
+			FUIAction(
+				FExecuteAction::CreateLambda([Preset, InHACs, LayoutBuilder]() -> void
+					{
+						bool bPresetApplied = false;
+						for (TWeakObjectPtr<UHoudiniAssetComponent> HAC : InHACs)
+						{
+							// Apply preset on Houdini Asset Component
+							if (!HAC.IsValid())
+							{
+								HOUDINI_LOG_WARNING(TEXT("Could not apply preset. HoudiniAssetComponent reference is no longer valid."));
+								continue;
+							}
+
+							FHoudiniToolsEditor::ApplyPresetToHoudiniAssetComponent(Preset, HAC.Get(), true);
+							bPresetApplied = true;
+						}
+					
+						if (bPresetApplied && LayoutBuilder)
+						{
+							LayoutBuilder->ForceRefreshDetails();
+						}
+					}),
+					FCanExecuteAction()
+				),
+			PresetItem,
+			NAME_None,
+			FText::FromString(Preset->Description)
+			);
+	}
+	MenuBuilder.EndSection();
+
+	return MenuBuilder.MakeWidget();
 }
 
 /*

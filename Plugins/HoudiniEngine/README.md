@@ -44,7 +44,6 @@ You should also check the Houdini Engine plug-in version matches your Houdini Ve
 
 You can learn how to export an Houdini Digital Assets (HDA), import it into Unreal Engine, and update the asset from [Assets documentation.](https://www.sidefx.com/docs/unreal/_assets.html)
 
-
 # Building from source
 
 01. Get the UE source code from: https://github.com/EpicGames/UnrealEngine/releases

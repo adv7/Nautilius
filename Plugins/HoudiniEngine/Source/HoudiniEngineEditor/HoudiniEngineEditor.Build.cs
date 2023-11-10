@@ -73,6 +73,7 @@ public class HoudiniEngineEditor : ModuleRules
                 "CoreUObject",
                 "HoudiniEngine",
                 "HoudiniEngineRuntime",
+                "ImageCore",
                 "Slate",
                 "SlateCore",
                 "Landscape",
@@ -117,7 +118,7 @@ public class HoudiniEngineEditor : ModuleRules
                 "EditorFramework"
             }
         );
-
+        
         if (Target.Version.MajorVersion == 5 && (Target.Version.MinorVersion == 0 || Target.Version.MinorVersion == 1))
 		{
 			PrivateDependencyModuleNames.AddRange(

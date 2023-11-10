@@ -1,4 +1,4 @@
-/*
+﻿/*
 * Copyright (c) <2021> Side Effects Software Inc.
 * All rights reserved.
 *
@@ -24,3 +24,26 @@
 * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Toolkits/AssetEditorModeUILayer.h"
+
+#include "HoudiniToolsEditorUISubsystem.generated.h"
+
+class FExtender;
+class SBorder;
+class IToolkit;
+class SDockTab;
+class ILevelEditor;
+
+UCLASS()
+class UHoudiniToolsEditorUISubsystem : public UAssetEditorUISubsystem
+{
+	GENERATED_BODY()
+
+public:
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	virtual void Deinitialize() override;
+	virtual void RegisterLayoutExtensions(FLayoutExtender& Extender) override;
+};

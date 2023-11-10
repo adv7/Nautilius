@@ -35,6 +35,7 @@
 #include "Widgets/Layout/SBorder.h"
 #include "Framework/SlateDelegates.h"
 #include "Widgets/Input/SButton.h"
+#include "HoudiniEngineDetails.h"
 #include "HoudiniEngineRuntimePrivatePCH.h"
 
 class IDetailCategoryBuilder;
@@ -75,6 +76,10 @@ public:
 		IDetailCategoryBuilder& HoudiniEngineCategoryBuilder,
 		const TArray<TWeakObjectPtr<UHoudiniAssetComponent>>& InHACs);
 
+	static void CreateHoudiniEngineActionWidget(
+		IDetailCategoryBuilder& HoudiniEngineCategoryBuilder,
+		const TArray<TWeakObjectPtr<UHoudiniAssetComponent>>& InHACs);
+
 	static void CreateGenerateWidgets(
 			IDetailCategoryBuilder& HoudiniEngineCategoryBuilder,
 			const TArray<TWeakObjectPtr<UHoudiniAssetComponent>>& InHACs);
@@ -108,6 +113,8 @@ public:
 	/** Construct drop down menu content for Houdini asset. **/
 	//static TSharedRef< SWidget > OnGetHoudiniAssetMenuContent(TArray<UHoudiniAssetComponent*> InHACs);
 
+	static TSharedPtr<SWidget> ConstructActionMenu(const TArray<TWeakObjectPtr<UHoudiniAssetComponent>>& InHACs, class IDetailLayoutBuilder*);
+
 	static void AddHeaderRowForHoudiniAssetComponent(
 		IDetailCategoryBuilder& HoudiniEngineCategoryBuilder,
 		const TWeakObjectPtr<UHoudiniAssetComponent>& HoudiniAssetComponent,
@@ -123,9 +130,6 @@ public:
 		FOnClicked& InOnExpanderClick,
 		TFunction<FText(void)>& InGetText,
 		TFunction<const FSlateBrush*(SButton* InExpanderArrow)>& InGetExpanderBrush);
-
-	// Helper for binding/unbinding the post cook bake delegate
-	static void OnBakeAfterCookChangedHelper(bool bInState, UHoudiniAssetComponent* InHAC);
 
 	// Helper to check if InWeakObjectPointer is valid or not. If not valid, the filepath and line number where the check
 	// occurred is logged.

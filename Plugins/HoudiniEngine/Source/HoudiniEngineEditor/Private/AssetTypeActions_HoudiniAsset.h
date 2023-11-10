@@ -34,6 +34,8 @@ class UHoudiniAsset;
 
 enum class EHoudiniToolType : uint8;
 
+// TODO: UE5.2 uses Asset Definitions instead of Asset Actions. See AssetDefinitions.h for a conversion guide.
+
 class FAssetTypeActions_HoudiniAsset : public FAssetTypeActions_Base
 {	
 	public:
@@ -43,7 +45,7 @@ class FAssetTypeActions_HoudiniAsset : public FAssetTypeActions_Base
 		virtual FColor GetTypeColor() const override;
 		virtual UClass* GetSupportedClass() const override;
 		virtual uint32 GetCategories() override;
-		//virtual UThumbnailInfo * GetThumbnailInfo(UObject * Asset) const override;
+		
 		virtual bool HasActions(const TArray< UObject * > & InObjects) const override;
 		virtual void GetActions(const TArray< UObject * > & InObjects, class FMenuBuilder & MenuBuilder) override;
 
@@ -73,6 +75,9 @@ class FAssetTypeActions_HoudiniAsset : public FAssetTypeActions_Base
 
 		// Handler to batch apply the current hda to the current world selection
 		void ExecuteApplyBatch(TArray<TWeakObjectPtr<UHoudiniAsset>> InHoudiniAssetPtrs );
+
+		// Handler to launch edit tool properties
+		static void ExecuteEditToolProperties(TArray<TWeakObjectPtr<UHoudiniAsset>> InHoudiniAssetPtrs);
 
 		// Handler to instantiate the HDA in the world
 		void ExecuteInstantiate(TArray<TWeakObjectPtr<UHoudiniAsset>> InHoudiniAssetPtrs);

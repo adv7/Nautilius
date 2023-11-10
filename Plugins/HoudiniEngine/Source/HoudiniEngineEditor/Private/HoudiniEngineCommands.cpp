@@ -60,6 +60,7 @@
 #include "ISettingsModule.h"
 #include "UObject/ObjectSaveContext.h"
 //#include "UObject/ObjectSaveContext.h"
+#include "LevelEditor.h"
 #include "UObject/UObjectIterator.h"
 
 #define LOCTEXT_NAMESPACE HOUDINI_LOCTEXT_NAMESPACE 
@@ -90,6 +91,7 @@ FHoudiniEngineCommands::RegisterCommands()
 
 	//NodeSync
 	UI_COMMAND(_OpenNodeSync, "Houdini Node Sync...", "Opens the Houdini Node Sync Panel.", EUserInterfaceActionType::Button, FInputChord());
+	UI_COMMAND(_OpenHoudiniTools, "Houdini Tools...", "Opens the Houdini Tools Panel.", EUserInterfaceActionType::Button, FInputChord());
 
 	// PDG Import Commandlet
 	UI_COMMAND(_StartPDGCommandlet, "Start Async Importer", "Start the commandlet that imports PDG BGEO results in the background.", EUserInterfaceActionType::Button, FInputChord());
@@ -97,7 +99,8 @@ FHoudiniEngineCommands::RegisterCommands()
 	UI_COMMAND(_IsPDGCommandletEnabled, "Enable Async Importer", "Enables the commandlet that imports PDG BGEO results in the background.", EUserInterfaceActionType::Check, FInputChord());
 	
 	UI_COMMAND(_InstallInfo, "Installation Info...", "Display information on the current Houdini Engine installation", EUserInterfaceActionType::Button, FInputChord());
-	UI_COMMAND(_PluginSettings, "PluginSettings...", "Displays the Houdini Engine plugin settings", EUserInterfaceActionType::Button, FInputChord());
+	UI_COMMAND(_PluginSettings, "Plugin Settings...", "Displays the Houdini Engine plugin project settings", EUserInterfaceActionType::Button, FInputChord());
+	UI_COMMAND(_PluginEditorSettings, "Plugin Editor Preferences...", "Displays the Houdini Engine plugin editor preferences", EUserInterfaceActionType::Button, FInputChord());
 
 	UI_COMMAND(_OpenInHoudini, "Open scene in Houdini...", "Opens the current Houdini scene in Houdini.", EUserInterfaceActionType::Button, FInputChord(EKeys::O, EModifierKey::Control | EModifierKey::Alt));
 	UI_COMMAND(_SaveHIPFile, "Save Houdini scene (HIP)", "Saves a .hip file of the current Houdini scene.", EUserInterfaceActionType::Button, FInputChord());
@@ -256,6 +259,12 @@ void
 FHoudiniEngineCommands::ShowPluginSettings()
 {
 	FModuleManager::LoadModuleChecked<ISettingsModule>("Settings").ShowViewer(FName("Project"), FName("Plugins"), FName("HoudiniEngine"));
+}
+
+void
+FHoudiniEngineCommands::ShowPluginEditorSettings()
+{
+	FModuleManager::LoadModuleChecked<ISettingsModule>("Settings").ShowViewer(FName("Editor"), FName("Plugins"), FName("HoudiniEngine"));
 }
 
 void
@@ -1160,28 +1169,16 @@ FHoudiniEngineCommands::CloseSessionSync()
 void
 FHoudiniEngineCommands::OpenNodeSync()
 {
-	//if (!FHoudiniEngine::Get().StopSession())
-	//{
-	//	// StopSession returns false only if Houdini is not initialized
-	//	HOUDINI_LOG_ERROR(TEXT("Failed to stop Session Sync - HAPI Not initialized"));
-	//	return;
-	//}
+	//FGlobalTabmanager::Get()->TryInvokeTab(NodeSyncTabName);
+	FLevelEditorModule& LevelEditorModule = FModuleManager::GetModuleChecked<FLevelEditorModule>(TEXT("LevelEditor"));
+	LevelEditorModule.GetLevelEditorTabManager()->TryInvokeTab(NodeSyncTabName);
+}
 
-	//// Add a slate notification
-	//FString Notification = TEXT("Stopping Houdini Session Sync...");
-	//FHoudiniEngineUtils::CreateSlateNotification(Notification);
-
-	//// ... and a log message
-	//HOUDINI_LOG_MESSAGE(TEXT("Stopping Houdini Session Sync."));
-
-	//// Stop Houdini Session sync if it is still running!
-	//FProcHandle PreviousHESS = FHoudiniEngine::Get().GetHESSProcHandle();
-	//if (FPlatformProcess::IsProcRunning(PreviousHESS))
-	//{
-	//	FPlatformProcess::TerminateProc(PreviousHESS, true);
-	//}
-	FGlobalTabmanager::Get()->TryInvokeTab(NodeSyncTabName);
-	return;
+void FHoudiniEngineCommands::OpenHoudiniToolsTab()
+{
+	// FGlobalTabmanager::Get()->TryInvokeTab(HoudiniToolsTabName);
+	FLevelEditorModule& LevelEditorModule = FModuleManager::GetModuleChecked<FLevelEditorModule>( TEXT("LevelEditor") );
+	LevelEditorModule.GetLevelEditorTabManager()->TryInvokeTab(HoudiniToolsTabName);
 }
 
 

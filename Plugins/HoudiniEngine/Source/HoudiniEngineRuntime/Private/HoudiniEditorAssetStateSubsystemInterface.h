@@ -1,5 +1,5 @@
 /*
-* Copyright (c) <2021> Side Effects Software Inc.
+* Copyright (c) <2023> Side Effects Software Inc.
 * All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
@@ -26,31 +26,34 @@
 
 #pragma once
 
-UENUM()
-enum class EHoudiniToolType : uint8
+#include "CoreTypes.h"
+
+#include "HoudiniAssetStateTypes.h"
+
+#if WITH_EDITOR 
+/**
+ * Interface for the HoudiniEditorAssetStateSubsystem. The interface defines / give us access to the API of the
+ * HoudiniEditorAssetStateSubsystem in the runtime module, while the implementation of the editor subsystem is in
+ * the editor module.
+ *
+ * Based on WorldPartition/ContentBundle/ContentBundleEditorSubsystemInterface.h
+ */
+class IHoudiniEditorAssetStateSubsystemInterface
 {
-	// For tools that generates geometry, and do not need input
-	HTOOLTYPE_GENERATOR UMETA(DisplayName = "Generator"),
 
-	// For tools that have a single input, the selection will be merged in that single input
-	HTOOLTYPE_OPERATOR_SINGLE UMETA(DisplayName = "Operator (single)"),
+public:
+	static IHoudiniEditorAssetStateSubsystemInterface* Get() { return Instance; }
 
-	// For Tools that have multiple input, a single selected asset will be applied to each input
-	HTOOLTYPE_OPERATOR_MULTI UMETA(DisplayName = "Operator (multiple)"),
+	virtual ~IHoudiniEditorAssetStateSubsystemInterface() {};
 
-	// For tools that needs to be applied each time for each single selected
-	HTOOLTYPE_OPERATOR_BATCH UMETA(DisplayName = "Batch Operator")
+protected:
+	// This should be called by the HoudiniEngineManager to notify the subsystem that a Houdini Asset object, such
+	// as a HoudiniAssetComponent, has changed state.
+	virtual void NotifyOfHoudiniAssetStateChange(UObject* InHoudiniAssetContext, const EHoudiniAssetState InFromState, const EHoudiniAssetState InToState) = 0;
+
+	friend class UHoudiniAssetComponent;
+
+	static HOUDINIENGINERUNTIME_API void SetInstance(IHoudiniEditorAssetStateSubsystemInterface* InInstance);
+	static HOUDINIENGINERUNTIME_API IHoudiniEditorAssetStateSubsystemInterface* Instance;
 };
-
-UENUM()
-enum class EHoudiniToolSelectionType : uint8
-{
-	// For tools that can be applied both to Content Browser and World selection
-	HTOOL_SELECTION_ALL UMETA(DisplayName = "Content Browser AND World"),
-
-	// For tools that can be applied only to World selection
-	HTOOL_SELECTION_WORLD_ONLY UMETA(DisplayName = "World selection only"),
-
-	// For tools that can be applied only to Content Browser selection
-	HTOOL_SELECTION_CB_ONLY UMETA(DisplayName = "Content browser selection only")
-};
+#endif

@@ -50,7 +50,6 @@ class UHoudiniInput;
 class UHoudiniOutput;
 class UHoudiniHandleComponent;
 class UHoudiniPDGAssetLink;
-class UHoudiniAssetComponent_V1;
 
 UENUM()
 enum class EHoudiniStaticMeshMethod : uint8
@@ -61,6 +60,17 @@ enum class EHoudiniStaticMeshMethod : uint8
 	FMeshDescription,
 	// Always build Houdini Proxy Meshes (dev)
 	UHoudiniStaticMesh,
+};
+
+UENUM()
+enum class EHoudiniBakeAfterNextCook : uint8
+{
+	// Do not bake after cook
+	Disabled,
+	// Always bake after cook if cook was successful,
+	Always,
+	// Bake after the next successful cook, then reset to Disabled.
+	Once
 };
 
 class UHoudiniAssetComponent;
@@ -92,17 +102,18 @@ public:
 
 	// Declare the delegate that is broadcast when RefineMeshesTimer fires
 	DECLARE_MULTICAST_DELEGATE_OneParam(FOnRefineMeshesTimerDelegate, UHoudiniAssetComponent*);
-	DECLARE_DELEGATE_RetVal_OneParam(bool, FOnPostCookBakeDelegate, UHoudiniAssetComponent*);
 	// Delegate for when EHoudiniAssetState changes from InFromState to InToState on a Houdini Asset Component (InHAC).
 	DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnAssetStateChangeDelegate, UHoudiniAssetComponent*, const EHoudiniAssetState, const EHoudiniAssetState);
+	DECLARE_MULTICAST_DELEGATE_OneParam(FOnPreInstantiationDelegate, UHoudiniAssetComponent*);
+	DECLARE_MULTICAST_DELEGATE_OneParam(FOnPreCookDelegate, UHoudiniAssetComponent*);
 	DECLARE_MULTICAST_DELEGATE_TwoParams(FOnPostCookDelegate, UHoudiniAssetComponent*, bool);
 	DECLARE_MULTICAST_DELEGATE_TwoParams(FOnPostBakeDelegate, UHoudiniAssetComponent*, bool);
+	DECLARE_MULTICAST_DELEGATE_TwoParams(FOnPostOutputProcessingDelegate, UHoudiniAssetComponent*, bool);
+	DECLARE_MULTICAST_DELEGATE_TwoParams(FOnPreOutputProcessingDelegate, UHoudiniAssetComponent*, bool);
 
 	virtual ~UHoudiniAssetComponent();
 
 	virtual void Serialize(FArchive & Ar) override;
-
-	virtual bool ConvertLegacyData();
 
 	// Called after the C++ constructor and after the properties have been initialized, including those loaded from config.
 	// This is called before any serialization or other setup has happened.
@@ -215,13 +226,25 @@ public:
 	// Returns true if the asset state indicates that it has been cooked in this session, false otherwise.
 	bool IsHoudiniCookedDataAvailable(bool &bOutNeedsRebuildOrDelete, bool &bOutInvalidState) const;
 	// Returns true if the asset should be bake after the next cook
-	bool IsBakeAfterNextCookEnabled() const { return bBakeAfterNextCook; }
+	bool IsBakeAfterNextCookEnabled() const { return BakeAfterNextCook != EHoudiniBakeAfterNextCook::Disabled; }
+	// Get the BakeAfterNextCook setting
+	EHoudiniBakeAfterNextCook GetBakeAfterNextCook() const { return BakeAfterNextCook; }
 
+	FOnPreInstantiationDelegate& GetOnPreInstantiationDelegate() { return OnPreInstantiationDelegate; }
+	FOnPreCookDelegate& GetOnPreCookDelegate() { return OnPreCookDelegate; }
 	FOnPostCookDelegate& GetOnPostCookDelegate() { return OnPostCookDelegate; }
-	FOnPostCookBakeDelegate& GetOnPostCookBakeDelegate() { return OnPostCookBakeDelegate; }
 	FOnPostBakeDelegate& GetOnPostBakeDelegate() { return OnPostBakeDelegate; }
+	FOnPreOutputProcessingDelegate& GetOnPreOutputProcessingDelegate() { return OnPreOutputProcessingDelegate; }
+	FOnPostOutputProcessingDelegate& GetOnPostOutputProcessingDelegate() { return OnPostOutputProcessingDelegate; }
 
 	FOnAssetStateChangeDelegate& GetOnAssetStateChangeDelegate() { return OnAssetStateChangeDelegate; }
+
+	// Register a callback that will be fired once during the next PreCook event, after which the callback
+	// will be removed from the queue.
+	// This is typically used when applying presets during HDA instantiation where we need to wait for
+	// the HoudiniAssetComponent to reach it's PreCook phase before we execute the callback to populate the HAC
+	// with the desired preset / input values.
+	void QueuePreCookCallback(const TFunction<void(UHoudiniAssetComponent*)>& CallbackFn);
 
 	// Derived blueprint based components will check whether the template
 	// component contains updates that needs to processed.
@@ -305,8 +328,8 @@ public:
 	// instead build a UStaticMesh directly (if applicable for the output type).
 	void SetNoProxyMeshNextCookRequested(bool bInNoProxyMeshNextCookRequested) { bNoProxyMeshNextCookRequested = bInNoProxyMeshNextCookRequested; }
 
-	// Set to True to force the next cook to bake the asset after the cook completes.
-	void SetBakeAfterNextCookEnabled(bool bInEnabled) { bBakeAfterNextCook = bInEnabled; }
+	// Set whether or not bake after cooking (disabled, always or once).
+	void SetBakeAfterNextCook(const EHoudiniBakeAfterNextCook InBakeAfterNextCook) { BakeAfterNextCook = InBakeAfterNextCook; }
 
 	//
 	void SetPDGAssetLink(UHoudiniPDGAssetLink* InPDGAssetLink);
@@ -370,11 +393,6 @@ public:
 
 	FBox GetAssetBounds(UHoudiniInput* IgnoreInput, bool bIgnoreGeneratedLandscape) const;
 
-	// Set this component's input presets
-	void SetInputPresets(const TMap<UObject*, int32>& InPresets);
-	// Apply the preset input for HoudiniTools
-	void ApplyInputPresets();
-
 	// return the cached component template, if available.
 	virtual UHoudiniAssetComponent* GetCachedTemplate() const { return nullptr; }
 
@@ -417,8 +435,8 @@ public:
 
 	virtual void OnPrePreCook() {};
 	virtual void OnPostPreCook() {};
-	virtual void OnPreOutputProcessing() {};
-	virtual void OnPostOutputProcessing() {};
+	virtual void OnPreOutputProcessing() { };
+	virtual void OnPostOutputProcessing() { };
 	virtual void OnPrePreInstantiation() {};
 
 
@@ -447,8 +465,12 @@ public:
 	// End: IHoudiniAssetStateEvents
 	//
 
-	// Called by HandleOnHoudiniAssetStateChange when entering the PostCook state. Broadcasts OnPostCookDelegate. 
+	// Called by HandleOnHoudiniAssetStateChange when entering the PostCook state. Broadcasts OnPostCookDelegate.
+	void HandleOnPreInstantiation();
+	void HandleOnPreCook();
 	void HandleOnPostCook();
+	void HandleOnPreOutputProcessing();
+	void HandleOnPostOutputProcessing();
 
 	// Called by baking code after baking all outputs of this HAC (HoudiniEngineBakeOption)
 	void HandleOnPostBake(const bool bInSuccess);
@@ -605,10 +627,10 @@ public:
 	// If true, replace the previously baked output (if any) instead of creating new objects
 	UPROPERTY()
 	bool bReplacePreviousBake;
-#endif
 
 	UPROPERTY()
 	bool bLandscapeUseTempLayers;
+#endif
 
 protected:
 
@@ -755,28 +777,33 @@ protected:
 	// instead build the UStaticMesh directly (if applicable for the output types).
 	UPROPERTY(DuplicateTransient)
 	bool bNoProxyMeshNextCookRequested;
-
-	// Maps a UObject to an Input number, used to preset the asset's inputs 
-	UPROPERTY(Transient, DuplicateTransient)
-	TMap<UObject*, int32> InputPresets;
+	
+	// If true, bake the asset after its next cook.
+	UPROPERTY(DuplicateTransient, meta=(DeprecatedProperty, DeprecationMessage="Use BakeAfterNextCook instead."))
+	bool bBakeAfterNextCook_DEPRECATED;
 
 	// If true, bake the asset after its next cook.
 	UPROPERTY(DuplicateTransient)
-	bool bBakeAfterNextCook;
+	EHoudiniBakeAfterNextCook BakeAfterNextCook;
+
+	// Delegate to broadcast before instantiation
+	// Arguments are (HoudiniAssetComponent* HAC)
+	FOnPreInstantiationDelegate OnPreInstantiationDelegate;
+
+	// Delegate to broadcast after a post cook event
+	// Arguments are (HoudiniAssetComponent* HAC, bool IsSuccessful)
+	FOnPreCookDelegate OnPreCookDelegate;
 
 	// Delegate to broadcast after a post cook event
 	// Arguments are (HoudiniAssetComponent* HAC, bool IsSuccessful)
 	FOnPostCookDelegate OnPostCookDelegate;
 
-	// Delegate to broadcast when baking after a cook.
-	// Currently we cannot call the bake functions from here (Runtime module)
-	// or from the HoudiniEngineManager (HoudiniEngine) module, so we use
-	// a delegate.
-	FOnPostCookBakeDelegate OnPostCookBakeDelegate;
-
 	// Delegate to broadcast after baking the HAC. Not called when just baking individual outputs directly.
 	// Arguments are (HoudiniAssetComponent* HAC, bool bIsSuccessful)
 	FOnPostBakeDelegate OnPostBakeDelegate;
+
+	FOnPostOutputProcessingDelegate OnPostOutputProcessingDelegate;
+	FOnPreOutputProcessingDelegate OnPreOutputProcessingDelegate;
 
 	// Delegate that is broadcast when the asset state changes (HAC version).
 	FOnAssetStateChangeDelegate OnAssetStateChangeDelegate;
@@ -786,9 +813,6 @@ protected:
 	// is no longer available.
 	UPROPERTY(Transient, DuplicateTransient)
 	bool bCachedIsPreview;
-
-	// Object used to convert V1 HAC to V2 HAC
-	UHoudiniAssetComponent_V1* Version1CompatibilityHAC;
 
 	// The last timestamp this component was ticked
 	// used to prioritize/limit the number of HAC processed per tick
@@ -806,6 +830,9 @@ protected:
 	// End: IHoudiniAssetStateEvents
 	//
 
+	// Store any PreCookCallbacks here until they HAC is ready to process them during the PreCook event.
+	TArray< TFunction<void(UHoudiniAssetComponent*)> > PreCookCallbacks;
+	
 #if WITH_EDITORONLY_DATA
 
 public:
