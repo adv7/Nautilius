@@ -1,6 +1,6 @@
 {
 	"FileVersion": 3,
-	"EngineAssociation": "5.3",
+	"EngineAssociation": "{68D38324-4548-62AF-3220-43928F9C9CCE}",
 	"Category": "",
 	"Description": "",
 	"Modules": [
@@ -10,6 +10,14 @@
 			"LoadingPhase": "Default",
 			"AdditionalDependencies": [
 				"Engine"
+			]
+		},
+		{
+			"Name": "TestAutomation",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [
+				"Gauntlet"
 			]
 		}
 	],
@@ -23,6 +31,10 @@
 		},
 		{
 			"Name": "HoudiniEngine",
+			"Enabled": true
+		},
+		{
+			"Name": "Gauntlet",
 			"Enabled": true
 		}
 	]
