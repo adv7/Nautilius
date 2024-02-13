@@ -4,13 +4,13 @@
 
 #include "CoreMinimal.h"
 #include "GauntletTestController.h"
-#include "NautiliusTestGauntletController.generated.h"
+#include "NautiliusTestController.generated.h"
 
 /**
  * 
  */
 UCLASS()
-class TESTAUTOMATION_API UNautiliusTestGauntletController : public UGauntletTestController
+class TESTAUTOMATION_API UNautiliusTestController : public UGauntletTestController
 {
 	GENERATED_BODY()
 
